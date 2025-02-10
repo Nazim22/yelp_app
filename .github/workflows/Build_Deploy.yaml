@@ -25,14 +25,33 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-          
+
       - name: Install dependencies
         run: npm install
+
+  code-scan:
+    name: 🔍 SonarQube Code Analysis
+    runs-on: self-hosted
+    needs: build
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run SonarQube Code Scan
+        uses: SonarSource/sonarqube-scan-action@v4
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          projectBaseDir: .
+          args: >
+            -Dsonar.projectKey=yelp-app
+            -Dsonar.organization=my-org
+            -Dsonar.host.url=http://34.41.33.191:9000
 
   docker_build:
     name: 🐳 Build Docker Image with MAPBOX_TOKEN
     runs-on: self-hosted
-    needs: build
+    needs: code-scan
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -67,14 +86,3 @@ jobs:
 
       - name: Push Docker Image
         run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:latest
-
-  deploy_test:
-    name: 🧪 Test Container Locally (with MAPBOX_TOKEN)
-    runs-on: self-hosted
-    needs: docker_push
-    steps:
-      - name: Run Container Locally
-        run: |
-          docker run -d -p 3000:3000 \
-            --name yelp-app \
-            docker.io/${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:latest
