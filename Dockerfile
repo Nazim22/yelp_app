@@ -4,24 +4,28 @@ FROM node:18
 # Set working directory
 WORKDIR /app
 
-# Copy package.json and package-lock.json
-COPY package.json package-lock.json ./
+# Accept build arguments for Mapbox, DB, and Cloudinary
+ARG MAPBOX_TOKEN
+ARG DB_URL
+ARG CLOUDINARY_CLOUD_NAME
+ARG CLOUDINARY_KEY
+ARG CLOUDINARY_SECRET
 
-# Install dependencies
+# Set environment variables for the app
+ENV MAPBOX_TOKEN=$MAPBOX_TOKEN
+ENV DB_URL=$DB_URL
+ENV CLOUDINARY_CLOUD_NAME=$CLOUDINARY_CLOUD_NAME
+ENV CLOUDINARY_KEY=$CLOUDINARY_KEY
+ENV CLOUDINARY_SECRET=$CLOUDINARY_SECRET
+
+# Copy package files and install dependencies
+COPY package.json package-lock.json ./
 RUN npm install
 
 # Copy all project files
 COPY . .
 
-# Accept MAPBOX_TOKEN and DB_URL as build arguments
-ARG MAPBOX_TOKEN
-ARG DB_URL
-
-# Make these values available at runtime
-ENV MAPBOX_TOKEN=${MAPBOX_TOKEN}
-ENV DB_URL=${DB_URL}
-
-# Expose application port
+# Expose the port the app runs on
 EXPOSE 3000
 
 # Start the application

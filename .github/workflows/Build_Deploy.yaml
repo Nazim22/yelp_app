@@ -54,7 +54,10 @@ jobs:
         run: |
           docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:latest \
             --build-arg MAPBOX_TOKEN="${{ secrets.MAPBOX_TOKEN }}" \
-            --build-arg DB_URL="${{ secrets.DB_URL }}" .
+            --build-arg DB_URL="${{ secrets.DB_URL }}" \
+            --build-arg CLOUDINARY_CLOUD_NAME="${{ secrets.CLOUDINARY_CLOUD_NAME }}" \
+            --build-arg CLOUDINARY_KEY="${{ secrets.CLOUDINARY_KEY }}" \
+            --build-arg CLOUDINARY_SECRET="${{ secrets.CLOUDINARY_SECRET }}" .
 
   trivy_scan:
     name: 🛡️ Trivy Security Scan
@@ -88,7 +91,14 @@ jobs:
     needs: docker_push
     steps:
       - name: Run the Docker Container
-        run: docker run -d -p 3000:3000 --name yelp-app docker.io/${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:latest
+        run: |
+          docker run -d -p 3000:3000 --name yelp-app \
+            -e MAPBOX_TOKEN=${{ secrets.MAPBOX_TOKEN }} \
+            -e DB_URL=${{ secrets.DB_URL }} \
+            -e CLOUDINARY_CLOUD_NAME=${{ secrets.CLOUDINARY_CLOUD_NAME }} \
+            -e CLOUDINARY_KEY=${{ secrets.CLOUDINARY_KEY }} \
+            -e CLOUDINARY_SECRET=${{ secrets.CLOUDINARY_SECRET }} \
+            docker.io/${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:latest
 
       - name: Verify Application Logs
         run: docker logs yelp-app
