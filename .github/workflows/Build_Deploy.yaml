@@ -74,7 +74,7 @@ jobs:
       - name: Run Trivy Image Scan (Fixed)
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.IMAGE_TAG }}  # ✅ Correctly referencing built image
+          image-ref: ${{ env.IMAGE_TAG }}  # ✅ Now scanning the correct image
           format: 'table'
           severity: 'HIGH,CRITICAL'
 
