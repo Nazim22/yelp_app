@@ -1,8 +1,11 @@
-name: 🚀 CI/CD Workflow
+name: CI/CD Workflow
 
 on:
-  workflow_dispatch:  # ✅ Manually triggered
+  workflow_dispatch:  # Manually triggered workflow
   push:
+    branches:
+      - main
+  pull_request:
     branches:
       - main
 
@@ -50,8 +53,7 @@ jobs:
     steps:
       - name: Build Docker Image
         run: |
-          IMAGE_TAG=${{ github.run_number }}
-          docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:$IMAGE_TAG \
+          docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:latest \
             --build-arg MAPBOX_TOKEN="${{ secrets.MAPBOX_TOKEN }}" \
             --build-arg DB_URL="${{ secrets.DB_URL }}" \
             --build-arg CLOUDINARY_CLOUD_NAME="${{ secrets.CLOUDINARY_CLOUD_NAME }}" \
@@ -66,7 +68,7 @@ jobs:
       - name: Scan Docker Image with Trivy
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: 'docker.io/${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:${{ github.run_number }}'
+          image-ref: 'docker.io/${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:latest'
           format: 'table'
           severity: 'HIGH,CRITICAL'
 
@@ -82,35 +84,38 @@ jobs:
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
       - name: Push Docker Image
-        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:${{ github.run_number }}
+        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:latest
 
-  update_manifest:
-    name: ✍️ Update Kubernetes Deployment Manifest
+  update_k8s_manifest:
+    name: 📄 Update Kubernetes Manifest
     runs-on: self-hosted
     needs: docker_push
     steps:
-      - name: Checkout code again
+      - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Update yelp-app-deployment.yaml with new image tag
+      - name: Update Image Tag in Kubernetes Deployment
         run: |
-          IMAGE_TAG=${{ github.run_number }}
-          sed -i "s|image: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:.*|image: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:$IMAGE_TAG|" K8s/yelp-app-deployment.yaml
+          sed -i "s|image: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:.*|image: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:latest|" K8s/yelp-app-deployment.yaml
 
       - name: Commit and Push Updated Manifest
         env:
-          GH_PAT: ${{ secrets.GH_PAT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
+
           git add K8s/yelp-app-deployment.yaml
-          git commit -m "Update image tag to $IMAGE_TAG"
-          git push https://x-access-token:${GH_PAT}@github.com/Nazim22/yelp_app.git main
+          git commit -m "Update image tag to latest" || echo "No changes to commit"
+
+          git push origin main
 
   test_run:
     name: 🧪 Run and Test Container
     runs-on: self-hosted
-    needs: update_manifest
+    needs: update_k8s_manifest
     steps:
       - name: Create .env File
         run: |
@@ -134,10 +139,7 @@ jobs:
         run: |
           docker run -d -p 3000:3000 --name yelp-app \
             --env-file .env \
-            docker.io/${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:${{ github.run_number }}
-
-      - name: Wait for Application to Start
-        run: sleep 10
+            docker.io/${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:latest
 
       - name: Verify Application Logs
         run: docker logs yelp-app
