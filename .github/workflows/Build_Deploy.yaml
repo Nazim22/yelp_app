@@ -65,7 +65,7 @@ jobs:
     needs: docker_build
     steps:
       - name: Scan Docker Image with Trivy
-        uses: aquasecurity/trivy-action@v0.6.0
+        uses: aquasecurity/trivy-action@v0.2.1
         with:
           image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:latest
 
