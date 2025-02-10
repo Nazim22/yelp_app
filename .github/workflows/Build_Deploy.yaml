@@ -36,20 +36,21 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Install Sonar Scanner
-        run: npm install -g sonar-scanner
-          
+        with:
+          fetch-depth: 0  # Ensure complete code is available for analysis
+        
       - name: Run SonarQube Scan
+        uses: sonarsource/sonarqube-scan-action@master
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_PROJECT_KEY: ${{ secrets.SONAR_PROJECT_KEY }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-        run: |
-          sonar-scanner \
-            -Dsonar.projectKey=$SONAR_PROJECT_KEY \
-            -Dsonar.host.url=$SONAR_HOST_URL \
-            -Dsonar.login=$SONAR_TOKEN
+
+      # Optional: Fail the workflow if the quality gate is not passed
+      # - name: Check Quality Gate
+      #   uses: sonarsource/sonarqube-quality-gate-action@master
+      #   timeout-minutes: 5
+      #   env:
+      #     SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
   docker_build:
     name: 🐳 Build Docker Image
