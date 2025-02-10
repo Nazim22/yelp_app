@@ -1,13 +1,16 @@
 name: CI/CD Workflow
 
 on:
-  workflow_dispatch:  # Manually triggered workflow
+  workflow_dispatch:  # ✅ Manually triggered workflow
   push:
     branches:
       - main
   pull_request:
     branches:
       - main
+
+permissions:   # ✅ Grant necessary permissions
+  contents: write  # Allows pushing changes to the repository
 
 jobs:
   checkout:
@@ -94,15 +97,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}  # ✅ Correct authentication for push
 
       - name: Update Image Tag in Kubernetes Deployment
         run: |
           sed -i "s|image: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:.*|image: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:latest|" K8s/yelp-app-deployment.yaml
 
       - name: Commit and Push Updated Manifest
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
@@ -110,7 +111,7 @@ jobs:
           git add K8s/yelp-app-deployment.yaml
           git commit -m "Update image tag to latest" || echo "No changes to commit"
 
-          git push origin main
+          git push origin main  # ✅ Uses GITHUB_TOKEN to authenticate push
 
   test_run:
     name: 🧪 Run and Test Container
