@@ -60,7 +60,7 @@ jobs:
         run: |
           docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:latest \
             --build-arg MAPBOX_TOKEN=${{ secrets.MAPBOX_TOKEN }} \
-            --build-arg DB_URL=${{ secrets.DB_URL }} .
+            --build-arg DB_URL=${{ secrets.DB_URL }} $GITHUB_WORKSPACE
 
   trivy_scan:
     name: 🛡️ Trivy Security Scan
@@ -100,4 +100,4 @@ jobs:
             docker.io/${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:latest
 
       - name: Verify Application Logs
-        run: docker logs yelp-a
+        run: docker logs yelp-app
