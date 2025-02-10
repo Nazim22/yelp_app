@@ -1,20 +1,25 @@
-# Use Node 18 as parent image
+# Use Node 18 as the base image
 FROM node:18
 
-# Change the working directory on the Docker image to /app
+# Set working directory
 WORKDIR /app
 
-# Copy package.json and package-lock.json to the /app directory
+# Copy package.json and package-lock.json
 COPY package.json package-lock.json ./
 
 # Install dependencies
 RUN npm install
 
-# Copy the rest of project files into this image
+# Copy all project files
 COPY . .
+
+# Accept MAPBOX_TOKEN as a build argument
+ARG MAPBOX_TOKEN
+# Make MAPBOX_TOKEN available as an environment variable at runtime
+ENV MAPBOX_TOKEN=${MAPBOX_TOKEN}
 
 # Expose application port
 EXPOSE 3000
 
 # Start the application
-CMD npm start
+CMD ["npm", "start"]
