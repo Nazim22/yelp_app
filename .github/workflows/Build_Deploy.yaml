@@ -29,39 +29,35 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-  sonar_scan:
+  code-scan:
     name: 🔍 SonarQube Code Analysis
     runs-on: self-hosted
     needs: build
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Ensure full repository is available for analysis
-        
-      - name: Run SonarQube Scan
-        uses: sonarsource/sonarqube-scan-action@master
+
+      - name: Run SonarQube Code Scan
+        uses: SonarSource/sonarqube-scan-action@v4
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-
-      # Optional: Uncomment to fail workflow if the Quality Gate is not passed
-      # - name: Check Quality Gate
-      #   uses: sonarsource/sonarqube-quality-gate-action@master
-      #   timeout-minutes: 5
-      #   env:
-      #     SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          projectBaseDir: .
+          args: >
+            -Dsonar.projectKey=yelp-app
+            -Dsonar.organization=my-org
+            -Dsonar.host.url=http://34.41.33.191:9000
 
   docker_build:
     name: 🐳 Build Docker Image
     runs-on: self-hosted
-    needs: sonar_scan
+    needs: code-scan
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Build Docker Image
-        run: docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/your-app:latest .
+        run: docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:latest .
 
   trivy_scan:
     name: 🛡️ Trivy Security Scan
@@ -71,7 +67,7 @@ jobs:
       - name: Scan Docker Image with Trivy
         uses: aquasecurity/trivy-action@v0.6.0
         with:
-          image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/your-app:latest
+          image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:latest
 
   docker_push:
     name: 🚀 Push Docker Image to Docker Hub
@@ -82,4 +78,4 @@ jobs:
         run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
       - name: Push Docker Image
-        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/your-app:latest
+        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:latest
