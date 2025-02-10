@@ -65,9 +65,12 @@ jobs:
     needs: docker_build
     steps:
       - name: Scan Docker Image with Trivy
-        uses: aquasecurity/trivy-action@v0.2.1
+        uses: aquasecurity/trivy-action@v0.29.0
         with:
           image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:latest
+          format: 'table'
+          exit-code: '1'
+          severity: 'HIGH,CRITICAL'
 
   docker_push:
     name: 🚀 Push Docker Image to Docker Hub
