@@ -6,13 +6,19 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: 'https://github.com/your-repo-name/k8-manifests'
-    targetRevision: HEAD
-    path: .
+    repoURL: https://github.com/Nazim22/yelp_app.git
+    targetRevision: main  # Branch name
+    path: K8s            # Directory containing Kubernetes manifests
   destination:
-    server: 'https://kubernetes.default.svc'
-    namespace: yelp-app
+    server: https://kubernetes.default.svc  # In-cluster Kubernetes API server
+    namespace: yelp-app  # Namespace where the app will be deployed
   syncPolicy:
     automated:
-      prune: true
-      selfHeal: true
+      prune: true  # Automatically remove resources that are no longer defined in Git
+      selfHeal: true  # Automatically heal any drift from the desired state
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
