@@ -37,7 +37,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Ensure complete code is available for analysis
+          fetch-depth: 0  # Ensure full repository is available for analysis
         
       - name: Run SonarQube Scan
         uses: sonarsource/sonarqube-scan-action@master
@@ -45,7 +45,7 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
-      # Optional: Fail the workflow if the quality gate is not passed
+      # Optional: Uncomment to fail workflow if the Quality Gate is not passed
       # - name: Check Quality Gate
       #   uses: sonarsource/sonarqube-quality-gate-action@master
       #   timeout-minutes: 5
