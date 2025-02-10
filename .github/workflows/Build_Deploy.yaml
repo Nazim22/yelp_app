@@ -1,0 +1,74 @@
+name: CI/CD Workflow
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: 🛠 Build and Install Dependencies
+    runs-on: self-hosted
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm install
+
+  sonar_scan:
+    name: 🔍 SonarQube Code Analysis
+    runs-on: self-hosted
+    needs: build
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run SonarQube Scan
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          npx sonar-scanner \
+            -Dsonar.projectKey=your_project_key \
+            -Dsonar.host.url=https://your-sonarqube-url \
+            -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+
+  docker_build:
+    name: 🐳 Build Docker Image
+    runs-on: self-hosted
+    needs: sonar_scan
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Docker Image
+        run: docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/your-app:latest .
+
+  trivy_scan:
+    name: 🛡️ Trivy Security Scan
+    runs-on: self-hosted
+    needs: docker_build
+    steps:
+      - name: Scan Docker Image with Trivy
+        uses: aquasecurity/trivy-action@v0.6.0
+        with:
+          image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/your-app:latest
+
+  docker_push:
+    name: 🚀 Push Docker Image to Docker Hub
+    runs-on: self-hosted
+    needs: trivy_scan
+    steps:
+      - name: Login to Docker Hub
+        run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+
+      - name: Push Docker Image
+        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/your-app:latest
