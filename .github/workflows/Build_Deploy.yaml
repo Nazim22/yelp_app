@@ -1,7 +1,7 @@
-name: CI/CD Workflow
+name: CI/CD Workflow with Kubernetes Manifest Update
 
 on:
-  workflow_dispatch:  # ✅ Manual trigger event
+  workflow_dispatch:
 
 jobs:
   checkout:
@@ -41,35 +41,24 @@ jobs:
             -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }}
 
   docker_build:
-    name: 🐳 Build Docker Image with Secrets
+    name: 🐳 Build Docker Image with Unique Tag
     runs-on: self-hosted
     needs: code-scan
     steps:
       - name: Build Docker Image
         run: |
-          docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:latest \
+          IMAGE_TAG=${{ github.run_number }}
+          docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:$IMAGE_TAG \
             --build-arg MAPBOX_TOKEN="${{ secrets.MAPBOX_TOKEN }}" \
             --build-arg DB_URL="${{ secrets.DB_URL }}" \
             --build-arg CLOUDINARY_CLOUD_NAME="${{ secrets.CLOUDINARY_CLOUD_NAME }}" \
             --build-arg CLOUDINARY_KEY="${{ secrets.CLOUDINARY_KEY }}" \
             --build-arg CLOUDINARY_SECRET="${{ secrets.CLOUDINARY_SECRET }}" .
 
-  trivy_scan:
-    name: 🛡️ Trivy Security Scan
-    runs-on: self-hosted
-    needs: docker_build
-    steps:
-      - name: Scan Docker Image with Trivy
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: 'docker.io/${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:latest'
-          format: 'table'
-          severity: 'HIGH,CRITICAL'
-
   docker_push:
     name: 🚀 Push Docker Image to Docker Hub
     runs-on: self-hosted
-    needs: trivy_scan
+    needs: docker_build
     steps:
       - name: Login to Docker Hub
         uses: docker/login-action@v2
@@ -78,43 +67,39 @@ jobs:
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
       - name: Push Docker Image
-        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:latest
+        run: |
+          IMAGE_TAG=${{ github.run_number }}
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:$IMAGE_TAG
 
-  test_run:
-    name: 🧪 Run and Test Container
+  update_manifest:
+    name: ✍️ Update Kubernetes Deployment Manifest
     runs-on: self-hosted
     needs: docker_push
     steps:
-      - name: Create .env File
-        run: |
-          echo "MAPBOX_TOKEN=${{ secrets.MAPBOX_TOKEN }}" >> .env
-          echo "DB_URL=${{ secrets.DB_URL }}" >> .env
-          echo "CLOUDINARY_CLOUD_NAME=${{ secrets.CLOUDINARY_CLOUD_NAME }}" >> .env
-          echo "CLOUDINARY_KEY=${{ secrets.CLOUDINARY_KEY }}" >> .env
-          echo "CLOUDINARY_SECRET=${{ secrets.CLOUDINARY_SECRET }}" >> .env
+      - name: Checkout code again
+        uses: actions/checkout@v4
 
-      - name: Remove Existing Container if Present
+      - name: Update yelp-app-deployment.yaml with new image tag
         run: |
-          if [ $(docker ps -aq -f name=yelp-app) ]; then
-            echo "Stopping and removing existing container..."
-            docker stop yelp-app || true
-            docker rm yelp-app || true
-          else
-            echo "No existing container found."
-          fi
+          IMAGE_TAG=${{ github.run_number }}
+          sed -i "s|image: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:.*|image: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:$IMAGE_TAG|" K8s/yelp-app-deployment.yaml
 
-      - name: Run the Docker Container with .env File
+      - name: Commit and Push Updated Manifest
         run: |
-          docker run -d -p 3000:3000 --name yelp-app \
-            --env-file .env \
-            docker.io/${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:latest
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git add K8s/yelp-app-deployment.yaml
+          git commit -m "Update image tag to $IMAGE_TAG"
+          git push
 
-      - name: Verify Application Logs
-        run: docker logs yelp-app
-
-      - name: Test Application Health Check with Retry Logic
-        run: |
-          for i in {1..10}; do
-            echo "Checking if application is up... Attempt $i"
-            curl --fail http://localhost:3000 && break || sleep 5
-          done
+  trivy_scan:
+    name: 🛡️ Trivy Security Scan
+    runs-on: self-hosted
+    needs: update_manifest
+    steps:
+      - name: Scan Docker Image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'docker.io/${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:${{ github.run_number }}'
+          format: 'table'
+          severity: 'HIGH,CRITICAL'
