@@ -98,6 +98,16 @@ jobs:
           echo "CLOUDINARY_KEY=${{ secrets.CLOUDINARY_KEY }}" >> .env
           echo "CLOUDINARY_SECRET=${{ secrets.CLOUDINARY_SECRET }}" >> .env
 
+      - name: Remove Existing Container if Present
+        run: |
+          if [ $(docker ps -aq -f name=yelp-app) ]; then
+            echo "Stopping and removing existing container..."
+            docker stop yelp-app || true
+            docker rm yelp-app || true
+          else
+            echo "No existing container found."
+          fi
+
       - name: Run the Docker Container with .env File
         run: |
           docker run -d -p 3000:3000 --name yelp-app \
