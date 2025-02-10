@@ -90,7 +90,7 @@ jobs:
     runs-on: self-hosted
     needs: docker_push
     steps:
-      - name: Run the Docker Container
+      - name: Run the Docker Container with Environment Variables
         run: |
           docker run -d -p 3000:3000 --name yelp-app \
             -e MAPBOX_TOKEN=${{ secrets.MAPBOX_TOKEN }} \
@@ -102,3 +102,6 @@ jobs:
 
       - name: Verify Application Logs
         run: docker logs yelp-app
+
+      - name: Test Application Health Check
+        run: curl --fail http://localhost:3000 || exit 1
