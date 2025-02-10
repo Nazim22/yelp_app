@@ -13,10 +13,13 @@ RUN npm install
 # Copy all project files
 COPY . .
 
-# Accept MAPBOX_TOKEN as a build argument
+# Accept MAPBOX_TOKEN and DB_URL as build arguments
 ARG MAPBOX_TOKEN
-# Make MAPBOX_TOKEN available as an environment variable at runtime
+ARG DB_URL
+
+# Make these values available at runtime
 ENV MAPBOX_TOKEN=${MAPBOX_TOKEN}
+ENV DB_URL=${DB_URL}
 
 # Expose application port
 EXPOSE 3000
