@@ -34,9 +34,6 @@ jobs:
     runs-on: self-hosted
     needs: build
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
       - name: Run SonarQube Code Scan
         uses: SonarSource/sonarqube-scan-action@v4
         env:
@@ -53,14 +50,8 @@ jobs:
     runs-on: self-hosted
     needs: code-scan
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
       - name: Build Docker Image
-        run: |
-          docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:latest \
-            --build-arg MAPBOX_TOKEN=${{ secrets.MAPBOX_TOKEN }} \
-            --build-arg DB_URL=${{ secrets.DB_URL }} $GITHUB_WORKSPACE
+        run: docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:latest --build-arg MAPBOX_TOKEN=${{ secrets.MAPBOX_TOKEN }} --build-arg DB_URL=${{ secrets.DB_URL }} .
 
   trivy_scan:
     name: 🛡️ Trivy Security Scan
@@ -94,10 +85,7 @@ jobs:
     needs: docker_push
     steps:
       - name: Run the Docker Container
-        run: |
-          docker run -d -p 3000:3000 \
-            --name yelp-app \
-            docker.io/${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:latest
+        run: docker run -d -p 3000:3000 --name yelp-app docker.io/${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:latest
 
       - name: Verify Application Logs
         run: docker logs yelp-app
