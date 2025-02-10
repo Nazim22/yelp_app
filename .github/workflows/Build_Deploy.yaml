@@ -9,18 +9,23 @@ on:
       - main
 
 jobs:
+  checkout:
+    name: 📥 Checkout Repository
+    runs-on: self-hosted
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
   build:
     name: 🛠 Build and Install Dependencies
     runs-on: self-hosted
+    needs: checkout
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-
+          
       - name: Install dependencies
         run: npm install
 
@@ -29,24 +34,29 @@ jobs:
     runs-on: self-hosted
     needs: build
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install Sonar Scanner
+        run: npm install -g sonar-scanner
+          
       - name: Run SonarQube Scan
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_PROJECT_KEY: ${{ secrets.SONAR_PROJECT_KEY }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
-          npx sonar-scanner \
-            -Dsonar.projectKey=your_project_key \
-            -Dsonar.host.url=https://your-sonarqube-url \
-            -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+          sonar-scanner \
+            -Dsonar.projectKey=$SONAR_PROJECT_KEY \
+            -Dsonar.host.url=$SONAR_HOST_URL \
+            -Dsonar.login=$SONAR_TOKEN
 
   docker_build:
     name: 🐳 Build Docker Image
     runs-on: self-hosted
     needs: sonar_scan
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Build Docker Image
