@@ -90,14 +90,18 @@ jobs:
     runs-on: self-hosted
     needs: docker_push
     steps:
-      - name: Run the Docker Container with Environment Variables
+      - name: Create .env File
+        run: |
+          echo "MAPBOX_TOKEN=${{ secrets.MAPBOX_TOKEN }}" >> .env
+          echo "DB_URL=${{ secrets.DB_URL }}" >> .env
+          echo "CLOUDINARY_CLOUD_NAME=${{ secrets.CLOUDINARY_CLOUD_NAME }}" >> .env
+          echo "CLOUDINARY_KEY=${{ secrets.CLOUDINARY_KEY }}" >> .env
+          echo "CLOUDINARY_SECRET=${{ secrets.CLOUDINARY_SECRET }}" >> .env
+
+      - name: Run the Docker Container with .env File
         run: |
           docker run -d -p 3000:3000 --name yelp-app \
-            -e MAPBOX_TOKEN=${{ secrets.MAPBOX_TOKEN }} \
-            -e DB_URL=${{ secrets.DB_URL }} \
-            -e CLOUDINARY_CLOUD_NAME=${{ secrets.CLOUDINARY_CLOUD_NAME }} \
-            -e CLOUDINARY_KEY=${{ secrets.CLOUDINARY_KEY }} \
-            -e CLOUDINARY_SECRET=${{ secrets.CLOUDINARY_SECRET }} \
+            --env-file .env \
             docker.io/${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:latest
 
       - name: Verify Application Logs
