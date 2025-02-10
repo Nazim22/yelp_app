@@ -91,14 +91,14 @@ jobs:
     needs: docker_push
     steps:
       - name: Run the Docker Container with Environment Variables
-        run: |
-          docker run -d -p 3000:3000 --name yelp-app \
-            -e MAPBOX_TOKEN=${{ secrets.MAPBOX_TOKEN }} \
-            -e DB_URL=${{ secrets.DB_URL }} \
-            -e CLOUDINARY_CLOUD_NAME=${{ secrets.CLOUDINARY_CLOUD_NAME }} \
-            -e CLOUDINARY_KEY=${{ secrets.CLOUDINARY_KEY }} \
-            -e CLOUDINARY_SECRET=${{ secrets.CLOUDINARY_SECRET }} \
-            docker.io/${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:latest
+      run: |
+        docker run -d -p 3000:3000 --name yelp-app \
+          -e MAPBOX_TOKEN=${{ secrets.MAPBOX_TOKEN }} \
+          -e DB_URL=${{ secrets.DB_URL }} \
+          -e CLOUDINARY_CLOUD_NAME=${{ secrets.CLOUDINARY_CLOUD_NAME }} \
+          -e CLOUDINARY_KEY=${{ secrets.CLOUDINARY_KEY }} \
+          -e CLOUDINARY_SECRET=${{ secrets.CLOUDINARY_SECRET }} \
+          docker.io/${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:latest          
 
       - name: Verify Application Logs
         run: docker logs yelp-app
