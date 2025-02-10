@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: yelp-app
+  namespace: yelp-app
+  labels:
+    app: yelp-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: yelp-app
+  template:
+    metadata:
+      labels:
+        app: yelp-app
+    spec:
+      containers:
+      - name: yelp-app
+        image: docker.io/dockeruser2068/yelp-app:latest
+        ports:
+        - containerPort: 3000
+        envFrom:
+        - configMapRef:
+            name: yelp-app-config
+        - secretRef:
+            name: yelp-app-secret
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 5

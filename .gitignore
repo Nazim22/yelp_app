@@ -37,7 +37,6 @@ VM_instance/
 GCP_infra/
 
 # Kubernetes deployment files if not needed
-k8s/
 
 # Miscellaneous
 *.swp

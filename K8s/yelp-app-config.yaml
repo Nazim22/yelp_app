@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: yelp-app-config
+  namespace: yelp-app
+data:
+  MAPBOX_TOKEN: "pk.eyJ1IjoibmF6aW0yMDY4IiwiYSI6ImNtNnk2OHI4bDAyc3Qyam9mcTJybGF5aTAifQ.gmn_VlLUo5tiHaxVAsDcVw"
