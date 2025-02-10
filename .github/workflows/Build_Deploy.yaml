@@ -100,4 +100,4 @@ jobs:
             docker.io/${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:latest
 
       - name: Verify Application Logs
-        run: docker logs yelp-app
+        run: docker logs yelp-a
