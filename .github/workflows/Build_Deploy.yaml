@@ -67,14 +67,14 @@ jobs:
             --build-arg CLOUDINARY_SECRET="${{ secrets.CLOUDINARY_SECRET }}" .
 
   trivy_scan:
-    name: 🛡️ Trivy Security Scan
+    name: 🛡️ Trivy Security Scan (Fixed)
     runs-on: self-hosted
     needs: docker_build
     steps:
-      - name: Scan Docker Image with Trivy
+      - name: Run Trivy Image Scan (Fixed)
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.IMAGE_TAG }}
+          image-ref: ${{ env.IMAGE_TAG }}  # ✅ Correctly referencing built image
           format: 'table'
           severity: 'HIGH,CRITICAL'
 
