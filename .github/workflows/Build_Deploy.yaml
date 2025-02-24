@@ -56,10 +56,8 @@ jobs:
     steps:
       - name: Define Image Tags
         run: |
-          IMAGE_TAG="${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:latest"
-          IMAGE_TAG_SHA="${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:${{ github.sha }}"
-          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
-          echo "IMAGE_TAG_SHA=$IMAGE_TAG_SHA" >> $GITHUB_ENV
+          echo "IMAGE_TAG=${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:latest" >> $GITHUB_ENV
+          echo "IMAGE_TAG_SHA=${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:${{ github.sha }}" >> $GITHUB_ENV
           echo "✅ Image Tags Defined: $IMAGE_TAG and $IMAGE_TAG_SHA"
 
       - name: Verify Image Tags
@@ -81,11 +79,14 @@ jobs:
     runs-on: self-hosted
     needs: docker_build
     steps:
-      - name: Verify Image Exists Before Scanning
+      - name: Print Image Name Before Scan
         run: |
           echo "Checking if image exists: $IMAGE_TAG_SHA"
+
+      - name: Verify Image Exists Before Scanning
+        run: |
           docker image inspect $IMAGE_TAG_SHA > /dev/null 2>&1 \
-            || (echo "❌ Image Not Found!" && exit 1)
+            || (echo "❌ Image Not Found! Ensure the build was successful." && exit 1)
 
       - name: Run Trivy Image Scan
         uses: aquasecurity/trivy-action@master
