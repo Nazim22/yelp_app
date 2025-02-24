@@ -1,7 +1,7 @@
 name: CI/CD Workflow
 
 on:
-  workflow_dispatch:  # ✅ Manually triggered workflow
+  workflow_dispatch:  # ✅ Allows manual execution
   push:
     branches:
       - main
@@ -74,7 +74,7 @@ jobs:
       - name: Run Trivy Image Scan (Fixed)
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.IMAGE_TAG }}  # ✅ Now scanning the correct image
+          image-ref: "${{ env.IMAGE_TAG }}"  # ✅ Ensuring the correct image is scanned
           format: 'table'
           severity: 'HIGH,CRITICAL'
 
