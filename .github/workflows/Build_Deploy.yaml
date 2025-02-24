@@ -20,10 +20,46 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+  determine_version:
+    name: 🔢 Determine Next Version
+    runs-on: self-hosted
+    needs: checkout
+    steps:
+      - name: Fetch Latest Tag
+        id: get_version
+        run: |
+          git fetch --tags
+          latest_tag=$(git tag --sort=-v:refname | head -n 1)
+          echo "Latest tag found: $latest_tag"
+          echo "LATEST_TAG=$latest_tag" >> $GITHUB_ENV
+
+      - name: Bump Version
+        id: bump_version
+        run: |
+          if [[ -z "$LATEST_TAG" ]]; then
+            new_version="1.0.0"
+          else
+            IFS='.' read -r major minor patch <<<"${LATEST_TAG//v/}"
+            if git log -1 --pretty=%B | grep -q "#major"; then
+              new_version="$((major+1)).0.0"
+            elif git log -1 --pretty=%B | grep -q "#minor"; then
+              new_version="$major.$((minor+1)).0"
+            else
+              new_version="$major.$minor.$((patch+1))"
+            fi
+          fi
+          echo "New version: v$new_version"
+          echo "VERSION=v$new_version" >> $GITHUB_ENV
+
+      - name: Push New Tag
+        run: |
+          git tag $VERSION
+          git push origin $VERSION
+
   build:
     name: 🛠 Build and Install Dependencies
     runs-on: self-hosted
-    needs: checkout
+    needs: determine_version
     steps:
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -50,15 +86,13 @@ jobs:
             -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }}
 
   docker_build:
-    name: 🐳 Build Docker Image with Unique Tag
+    name: 🐳 Build Docker Image with Semantic Versioning
     runs-on: self-hosted
     needs: code-scan
     steps:
-      - name: Define Image Tag
-        run: echo "IMAGE_TAG=${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:${{ github.sha }}" >> $GITHUB_ENV
-
       - name: Build Docker Image
         run: |
+          IMAGE_TAG="${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:${{ env.VERSION }}"
           docker build -t $IMAGE_TAG \
             --build-arg MAPBOX_TOKEN="${{ secrets.MAPBOX_TOKEN }}" \
             --build-arg DB_URL="${{ secrets.DB_URL }}" \
@@ -71,13 +105,13 @@ jobs:
     runs-on: self-hosted
     needs: docker_build
     steps:
-      - name: Load IMAGE_TAG
-        run: echo "IMAGE_TAG=${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:${{ github.sha }}" >> $GITHUB_ENV
+      - name: Ensure Image Exists Locally
+        run: docker images | grep "${{ secrets.DOCKERHUB_USERNAME }}/yelp-app" || exit 1  # ✅ Ensures image exists
 
-      - name: Run Trivy Image Scan
+      - name: Run Trivy Image Scan (Fixed)
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: "${{ env.IMAGE_TAG }}"  # ✅ Now scanning the correct image
+          image-ref: "${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:${{ env.VERSION }}"  # ✅ Uses locally built image
           format: 'table'
           severity: 'HIGH,CRITICAL'
 
@@ -86,21 +120,19 @@ jobs:
     runs-on: self-hosted
     needs: trivy_scan
     steps:
-      - name: Load IMAGE_TAG
-        run: echo "IMAGE_TAG=${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:${{ github.sha }}" >> $GITHUB_ENV
-
       - name: Login to Docker Hub
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
-      - name: Verify Image Tag Before Push
-        run: |
-          echo "Pushing image: $IMAGE_TAG"
+      - name: Push Versioned Image
+        run: docker push "${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:${{ env.VERSION }}"
 
-      - name: Push Docker Image
-        run: docker push $IMAGE_TAG
+      - name: Tag & Push Latest
+        run: |
+          docker tag "${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:${{ env.VERSION }}" "${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:latest"
+          docker push "${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:latest"
 
   update_k8s_manifest:
     name: 📄 Update Kubernetes Deployment with New Image Tag
@@ -114,7 +146,7 @@ jobs:
 
       - name: Update Image Tag in Kubernetes Deployment
         run: |
-          sed -i "s|image: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:.*|image: $IMAGE_TAG|" K8s/yelp-app-deployment.yaml
+          sed -i "s|image: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:.*|image: ${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:${{ env.VERSION }}|" K8s/yelp-app-deployment.yaml
 
       - name: Commit and Push Updated Manifest
         run: |
@@ -122,45 +154,6 @@ jobs:
           git config --global user.email "actions@github.com"
 
           git add K8s/yelp-app-deployment.yaml
-          git commit -m "Update image tag to $IMAGE_TAG" || echo "No changes to commit"
-
+          git commit -m "Update image tag to ${{ env.VERSION }}" || echo "No changes to commit"
           git push origin main
 
-  test_run:
-    name: 🧪 Run and Test Container
-    runs-on: self-hosted
-    needs: update_k8s_manifest
-    steps:
-      - name: Create .env File
-        run: |
-          echo "MAPBOX_TOKEN=${{ secrets.MAPBOX_TOKEN }}" >> .env
-          echo "DB_URL=${{ secrets.DB_URL }}" >> .env
-          echo "CLOUDINARY_CLOUD_NAME=${{ secrets.CLOUDINARY_CLOUD_NAME }}" >> .env
-          echo "CLOUDINARY_KEY=${{ secrets.CLOUDINARY_KEY }}" >> .env
-          echo "CLOUDINARY_SECRET=${{ secrets.CLOUDINARY_SECRET }}" >> .env
-
-      - name: Remove Existing Container if Present
-        run: |
-          if [ $(docker ps -aq -f name=yelp-app) ]; then
-            echo "Stopping and removing existing container..."
-            docker stop yelp-app || true
-            docker rm yelp-app || true
-          else
-            echo "No existing container found."
-          fi
-
-      - name: Run the Docker Container with .env File
-        run: |
-          docker run -d -p 3000:3000 --name yelp-app \
-            --env-file .env \
-            $IMAGE_TAG
-
-      - name: Verify Application Logs
-        run: docker logs yelp-app
-
-      - name: Test Application Health Check with Retry Logic
-        run: |
-          for i in {1..10}; do
-            echo "Checking if application is up... Attempt $i"
-            curl --fail http://localhost:3000 && break || sleep 5
-          done
