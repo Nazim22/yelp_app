@@ -53,11 +53,16 @@ jobs:
     name: 🐳 Build Docker Image
     runs-on: self-hosted
     needs: code-scan
+    outputs:
+      image_tag_sha: ${{ steps.set_tag.outputs.IMAGE_TAG_SHA }}  # ✅ Persisting IMAGE_TAG_SHA
     steps:
       - name: Define Image Tags
+        id: set_tag
         run: |
           echo "IMAGE_TAG=${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:latest" >> $GITHUB_ENV
           echo "IMAGE_TAG_SHA=${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:${{ github.sha }}" >> $GITHUB_ENV
+          echo "IMAGE_TAG_SHA=${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:${{ github.sha }}" 
+          echo "IMAGE_TAG_SHA=${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:${{ github.sha }}" >> $GITHUB_OUTPUT  # ✅ Output variable for later jobs
 
       - name: Build Docker Image
         run: |
@@ -80,8 +85,8 @@ jobs:
     steps:
       - name: Debug IMAGE_TAG_SHA Before Scanning
         run: |
-          echo "🔍 Trivy will scan: $IMAGE_TAG_SHA"
-          if [[ -z "$IMAGE_TAG_SHA" ]]; then
+          echo "🔍 Trivy will scan: ${{ needs.docker_build.outputs.image_tag_sha }}"
+          if [[ -z "${{ needs.docker_build.outputs.image_tag_sha }}" ]]; then
             echo "❌ IMAGE_TAG_SHA is empty! Skipping scan."
             exit 1
           fi
@@ -89,7 +94,7 @@ jobs:
       - name: Run Trivy Image Scan
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.IMAGE_TAG_SHA }}  
+          image-ref: ${{ needs.docker_build.outputs.image_tag_sha }}  
           format: 'table'
           severity: 'HIGH,CRITICAL'
 
@@ -106,8 +111,8 @@ jobs:
 
       - name: Push Docker Image
         run: |
-          echo "Pushing Image: $IMAGE_TAG_SHA"
-          docker push $IMAGE_TAG_SHA
+          echo "Pushing Image: ${{ needs.docker_build.outputs.image_tag_sha }}"
+          docker push ${{ needs.docker_build.outputs.image_tag_sha }}
 
   update_k8s_manifest:
     name: 📄 Update Kubernetes Deployment with New Image Tag
@@ -121,7 +126,7 @@ jobs:
 
       - name: Update Image Tag in Kubernetes Deployment
         run: |
-          sed -i "s|image: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:.*|image: $IMAGE_TAG_SHA|" K8s/yelp-app-deployment.yaml
+          sed -i "s|image: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:.*|image: ${{ needs.docker_build.outputs.image_tag_sha }}|" K8s/yelp-app-deployment.yaml
 
       - name: Commit and Push Updated Manifest
         run: |
@@ -129,7 +134,7 @@ jobs:
           git config --global user.email "actions@github.com"
 
           git add K8s/yelp-app-deployment.yaml
-          git commit -m "Update image tag to $IMAGE_TAG_SHA" || echo "No changes to commit"
+          git commit -m "Update image tag to ${{ needs.docker_build.outputs.image_tag_sha }}" || echo "No changes to commit"
           git push origin main  
 
   test_run:
@@ -159,7 +164,7 @@ jobs:
         run: |
           docker run -d -p 3000:3000 --name yelp-app \
             --env-file .env \
-            $IMAGE_TAG_SHA
+            ${{ needs.docker_build.outputs.image_tag_sha }}
 
       - name: Verify Application Logs
         run: docker logs yelp-app
