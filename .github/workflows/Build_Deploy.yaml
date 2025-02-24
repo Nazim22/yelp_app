@@ -33,10 +33,26 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+  code-scan:
+    name: 🔍 SonarQube Code Analysis
+    runs-on: self-hosted
+    needs: build
+    steps:
+      - name: Run SonarQube Code Scan
+        uses: SonarSource/sonarqube-scan-action@v4
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          projectBaseDir: .
+          args: >
+            -Dsonar.projectKey=yelp-app
+            -Dsonar.organization=my-org
+            -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }}
+
   docker_build:
     name: 🐳 Build Docker Image
     runs-on: self-hosted
-    needs: build
+    needs: code-scan
     steps:
       - name: Define Image Tags
         run: |
@@ -58,14 +74,14 @@ jobs:
             --build-arg CLOUDINARY_SECRET="${{ secrets.CLOUDINARY_SECRET }}"
 
   trivy_scan:
-    name: 🛡️ Trivy Security Scan
+    name: 🛡️ Trivy Security Scan (Fixed)
     runs-on: self-hosted
     needs: docker_build
     steps:
       - name: Run Trivy Image Scan
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.IMAGE_TAG_SHA }}  # ✅ Scans the commit SHA-tagged image
+          image-ref: ${{ env.IMAGE_TAG_SHA }}  # ✅ Scans SHA-tagged image
           format: 'table'
           severity: 'HIGH,CRITICAL'
 
