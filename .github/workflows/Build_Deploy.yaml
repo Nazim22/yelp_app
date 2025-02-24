@@ -1,7 +1,7 @@
 name: CI/CD Workflow
 
 on:
-  workflow_dispatch:  # ✅ Allows manual execution
+  workflow_dispatch:  # ✅ Manually triggered workflow
   push:
     branches:
       - main
@@ -55,7 +55,7 @@ jobs:
     needs: code-scan
     steps:
       - name: Define Image Tag
-        run: echo "IMAGE_TAG=${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:${{ github.sha }}" >> $GITHUB_ENV  # ✅ Unique tag
+        run: echo "IMAGE_TAG=${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:${{ github.sha }}" >> $GITHUB_ENV
 
       - name: Build Docker Image
         run: |
@@ -74,7 +74,7 @@ jobs:
       - name: Run Trivy Image Scan (Fixed)
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: "${{ env.IMAGE_TAG }}"  # ✅ Ensuring Trivy scans the correct image
+          image-ref: "${{ env.IMAGE_TAG }}"
           format: 'table'
           severity: 'HIGH,CRITICAL'
 
@@ -93,10 +93,11 @@ jobs:
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
       - name: Verify Image Tag Before Push
-        run: echo "Pushing image: $IMAGE_TAG"  # ✅ Debugging
+        run: |
+          echo "Pushing image: $IMAGE_TAG"
 
       - name: Push Docker Image
-        run: docker push $IMAGE_TAG  # ✅ Now correctly set and pushed
+        run: docker push $IMAGE_TAG
 
   update_k8s_manifest:
     name: 📄 Update Kubernetes Deployment with New Image Tag
@@ -106,7 +107,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GH_PAT }}  # ✅ Use personal access token
+          token: ${{ secrets.GH_PAT }}
 
       - name: Update Image Tag in Kubernetes Deployment
         run: |
@@ -120,7 +121,7 @@ jobs:
           git add K8s/yelp-app-deployment.yaml
           git commit -m "Update image tag to $IMAGE_TAG" || echo "No changes to commit"
 
-          git push origin main  # ✅ Uses GH_PAT to authenticate push
+          git push origin main
 
   test_run:
     name: 🧪 Run and Test Container
