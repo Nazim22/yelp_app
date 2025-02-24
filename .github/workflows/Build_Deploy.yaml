@@ -68,8 +68,9 @@ jobs:
             --build-arg CLOUDINARY_KEY="${{ secrets.CLOUDINARY_KEY }}" \
             --build-arg CLOUDINARY_SECRET="${{ secrets.CLOUDINARY_SECRET }}"
 
-      - name: Verify Built Image Locally
+      - name: Verify Built Image
         run: |
+          echo "Verifying image: $IMAGE_TAG_SHA"
           if [[ "$(docker images -q $IMAGE_TAG_SHA 2> /dev/null)" == "" ]]; then
             echo "❌ Image Not Found! Build failed."
             exit 1
@@ -84,6 +85,7 @@ jobs:
     steps:
       - name: Verify Image Exists Before Scan
         run: |
+          echo "Checking if image exists before scan: $IMAGE_TAG_SHA"
           if [[ "$(docker images -q $IMAGE_TAG_SHA 2> /dev/null)" == "" ]]; then
             echo "❌ Image Not Found! Skipping scan..."
             exit 1
