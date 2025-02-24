@@ -55,11 +55,11 @@ jobs:
     needs: code-scan
     steps:
       - name: Define Image Tag
-        run: echo "IMAGE_TAG_SHA=${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:${{ github.sha }}" >> image_tag.txt
+        run: echo "${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:${{ github.sha }}" > image_tag.txt
 
       - name: Build Docker Image
         run: |
-          docker build -t $(cat image_tag.txt) \
+          docker build -t "$(cat image_tag.txt)" \
             --build-arg MAPBOX_TOKEN="${{ secrets.MAPBOX_TOKEN }}" \
             --build-arg DB_URL="${{ secrets.DB_URL }}" \
             --build-arg CLOUDINARY_CLOUD_NAME="${{ secrets.CLOUDINARY_CLOUD_NAME }}" \
@@ -73,6 +73,7 @@ jobs:
     steps:
       - name: Load Image Tag for Trivy
         run: echo "IMAGE_TAG_SHA=$(cat image_tag.txt)" >> $GITHUB_ENV
+        shell: bash
 
       - name: Run Trivy Image Scan
         uses: aquasecurity/trivy-action@master
@@ -93,7 +94,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
       - name: Push Docker Image
-        run: docker push $(cat image_tag.txt)
+        run: docker push "$(cat image_tag.txt)"
 
   update_k8s_manifest:
     name: 📄 Update Kubernetes Deployment in External Repo
@@ -105,11 +106,6 @@ jobs:
         with:
           repository: Nazim22/yelp-app-k8s  # ✅ External Kubernetes repo
           token: ${{ secrets.GH_PAT }}
-
-      - name: Download Image Tag File
-        uses: actions/download-artifact@v4
-        with:
-          name: image-tag
 
       - name: Run Manifest Update Script
         run: |
@@ -152,7 +148,7 @@ jobs:
         run: |
           docker run -d -p 3000:3000 --name yelp-app \
             --env-file .env \
-            $(cat image_tag.txt)
+            "$(cat image_tag.txt)"
 
       - name: Verify Application Logs
         run: docker logs yelp-app
