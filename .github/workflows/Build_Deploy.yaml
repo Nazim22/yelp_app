@@ -33,10 +33,26 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+  code_scan:
+    name: 🔍 SonarQube Code Analysis
+    runs-on: self-hosted
+    needs: build
+    steps:
+      - name: Run SonarQube Code Scan
+        uses: SonarSource/sonarqube-scan-action@v4
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          projectBaseDir: .
+          args: >
+            -Dsonar.projectKey=yelp-app
+            -Dsonar.organization=my-org
+            -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }}
+
   docker_build:
     name: 🐳 Build Docker Image
     runs-on: self-hosted
-    needs: build
+    needs: code_scan
     steps:
       - name: Define Image Tags
         run: |
@@ -109,7 +125,13 @@ jobs:
           echo "IMAGE_TAG_SHA=$IMAGE_TAG_SHA" >> $GITHUB_ENV
           
           echo "Pushing Image: $IMAGE_TAG_SHA"
-          docker push $IMAGE_TAG_SHA
+
+      - name: ✅ Login to Docker Hub (Fixes Access Denied Issue)
+        run: |
+          echo "${{ secrets.DOCKERHUB_PASSWORD }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+
+      - name: ✅ Push Docker Image to Docker Hub
+        run: docker push $IMAGE_TAG_SHA
 
       - name: Cleanup Image Tag File After Push
         run: rm -f image_tag.txt
