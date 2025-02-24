@@ -57,6 +57,12 @@ jobs:
       - name: Define Image Tag
         run: echo "${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:${{ github.sha }}" > image_tag.txt
 
+      - name: Upload Image Tag as an Artifact  # ✅ Save file for later jobs
+        uses: actions/upload-artifact@v3
+        with:
+          name: image-tag
+          path: image_tag.txt
+
       - name: Build Docker Image
         run: |
           docker build -t "$(cat image_tag.txt)" \
@@ -71,6 +77,11 @@ jobs:
     runs-on: self-hosted
     needs: docker_build
     steps:
+      - name: Download Image Tag
+        uses: actions/download-artifact@v3
+        with:
+          name: image-tag
+
       - name: Load Image Tag for Trivy
         run: echo "IMAGE_TAG_SHA=$(cat image_tag.txt)" >> $GITHUB_ENV
         shell: bash
@@ -87,6 +98,11 @@ jobs:
     runs-on: self-hosted
     needs: trivy_scan
     steps:
+      - name: Download Image Tag
+        uses: actions/download-artifact@v3
+        with:
+          name: image-tag
+
       - name: Login to Docker Hub
         uses: docker/login-action@v2
         with:
@@ -101,6 +117,11 @@ jobs:
     runs-on: self-hosted
     needs: docker_push
     steps:
+      - name: Download Image Tag
+        uses: actions/download-artifact@v3
+        with:
+          name: image-tag
+
       - name: Checkout Kubernetes Repo
         uses: actions/checkout@v4
         with:
@@ -126,6 +147,11 @@ jobs:
     runs-on: self-hosted
     needs: update_k8s_manifest
     steps:
+      - name: Download Image Tag
+        uses: actions/download-artifact@v3
+        with:
+          name: image-tag
+
       - name: Create .env File
         run: |
           echo "MAPBOX_TOKEN=${{ secrets.MAPBOX_TOKEN }}" >> .env
