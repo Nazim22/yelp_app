@@ -125,14 +125,15 @@ jobs:
         run: docker push $IMAGE_TAG_SHA
 
   update_k8s_manifest:
-    name: 📄 Update Kubernetes Deployment with New Image Tag
+    name: 📄 Update Kubernetes Deployment (External Repo)
     runs-on: self-hosted
     needs: docker_push
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GH_PAT }}
+      - name: Clone Kubernetes Manifest Repository
+        run: |
+          git clone https://x-access-token:${{ secrets.GH_PAT }}@github.com/Nazim22/yelp-app-k8s.git
+          cd yelp-app-k8s
+          echo "📂 Cloned Kubernetes repo: yelp-app-k8s"
 
       - name: Download Image Tag Artifact
         uses: actions/download-artifact@v4
@@ -145,29 +146,26 @@ jobs:
           echo "🔄 Updating Kubernetes manifest with image: $IMAGE_TAG_SHA"
           echo "IMAGE_TAG_SHA=$IMAGE_TAG_SHA" >> $GITHUB_ENV
 
-      - name: Debug - Show Deployment YAML Before Change
-        run: cat K8s/yelp-app-deployment.yaml
-
       - name: Update Image Tag in Kubernetes Deployment
         run: |
-          sed -i "s|image: .*yelp-app:.*|image: $IMAGE_TAG_SHA|" K8s/yelp-app-deployment.yaml
+          cd yelp-app-k8s
+          sed -i "s|image: .*yelp-app:.*|image: $IMAGE_TAG_SHA|" yelp-app-deployment.yaml
+          cat yelp-app-deployment.yaml  # ✅ Debugging
 
-      - name: Debug - Show Deployment YAML After Change
-        run: cat K8s/yelp-app-deployment.yaml
-
-      - name: Commit and Push Updated Manifest
+      - name: Commit and Push Updated Manifest to External Repo
         run: |
+          cd yelp-app-k8s
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
 
-          git add K8s/yelp-app-deployment.yaml || echo "❌ File not found!"
+          git add yelp-app-deployment.yaml || echo "❌ File not found!"
           git status  # ✅ Show status before committing
           
           if git diff --cached --quiet; then
             echo "⚠️ No changes detected in manifest. Skipping commit."
           else
             git commit -m "🚀 Update image tag to $IMAGE_TAG_SHA"
-            git push origin main
+            git push https://x-access-token:${{ secrets.GH_PAT }}@github.com/Nazim22/yelp-app-k8s.git main
           fi
 
   test_run:
