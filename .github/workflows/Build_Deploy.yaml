@@ -28,35 +28,26 @@ jobs:
       - name: Fetch Latest Tag
         id: get_version
         run: |
-          git fetch --tags
+          git fetch --tags || true
           latest_tag=$(git tag --sort=-v:refname | head -n 1)
-          echo "Latest tag found: $latest_tag"
+          if [[ -z "$latest_tag" ]]; then
+            latest_tag="v1.0.0"
+          fi
           echo "LATEST_TAG=$latest_tag" >> $GITHUB_ENV
 
       - name: Bump Version
         id: bump_version
         run: |
-          if [[ -z "$LATEST_TAG" ]]; then
-            new_version="1.0.0"
+          IFS='.' read -r major minor patch <<<"${LATEST_TAG//v/}"
+          if git log -1 --pretty=%B | grep -q "#major"; then
+            new_version="$((major+1)).0.0"
+          elif git log -1 --pretty=%B | grep -q "#minor"; then
+            new_version="$major.$((minor+1)).0"
           else
-            IFS='.' read -r major minor patch <<<"${LATEST_TAG//v/}"
-            if git log -1 --pretty=%B | grep -q "#major"; then
-              new_version="$((major+1)).0.0"
-            elif git log -1 --pretty=%B | grep -q "#minor"; then
-              new_version="$major.$((minor+1)).0"
-            else
-              new_version="$major.$minor.$((patch+1))"
-            fi
+            new_version="$major.$minor.$((patch+1))"
           fi
-          echo "New version: v$new_version"
           echo "VERSION=v$new_version" >> $GITHUB_ENV
-
-      - name: Push New Tag (Using GH_PAT for Auth)
-        run: |
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "actions@github.com"
-          git tag $VERSION
-          git push https://x-access-token:${{ secrets.GH_PAT }}@github.com/Nazim22/yelp_app.git $VERSION
+          echo "IMAGE_TAG=${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:$VERSION" >> $GITHUB_ENV
 
   build:
     name: 🛠 Build and Install Dependencies
@@ -92,9 +83,6 @@ jobs:
     runs-on: self-hosted
     needs: code-scan
     steps:
-      - name: Define Image Tag
-        run: echo "IMAGE_TAG=${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:$VERSION" >> $GITHUB_ENV  # ✅ Uses Semantic Versioning
-
       - name: Build Docker Image
         run: |
           docker build -t $IMAGE_TAG \
@@ -105,11 +93,11 @@ jobs:
             --build-arg CLOUDINARY_SECRET="${{ secrets.CLOUDINARY_SECRET }}" .
 
   trivy_scan:
-    name: 🛡️ Trivy Security Scan (Fixed)
+    name: 🛡️ Trivy Security Scan
     runs-on: self-hosted
     needs: docker_build
     steps:
-      - name: Run Trivy Image Scan (Fixed)
+      - name: Run Trivy Image Scan
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: $IMAGE_TAG  # ✅ Now scanning the correct image
@@ -156,10 +144,25 @@ jobs:
 
           git push origin main  # ✅ Uses GH_PAT to authenticate push
 
+  tag_version:
+    name: 🏷️ Create Git Tag for Versioning
+    runs-on: self-hosted
+    needs: update_k8s_manifest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT }}  # ✅ Use personal access token
+
+      - name: Create and Push Git Tag
+        run: |
+          git tag $VERSION
+          git push origin $VERSION  # ✅ Push version tag
+
   test_run:
     name: 🧪 Run and Test Container
     runs-on: self-hosted
-    needs: update_k8s_manifest
+    needs: tag_version
     steps:
       - name: Create .env File
         run: |
