@@ -150,7 +150,7 @@ jobs:
           git push origin main
 
   cleanup:
-    name: 🧹 Cleanup: Delete Image Tag File
+    name: 🧹 Cleanup Image Tag File
     runs-on: self-hosted
     needs: update-k8s-manifest
     steps:
