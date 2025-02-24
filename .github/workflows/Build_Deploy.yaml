@@ -71,10 +71,13 @@ jobs:
     runs-on: self-hosted
     needs: docker_build
     steps:
+      - name: Load IMAGE_TAG from previous step
+        run: echo "IMAGE_TAG=${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:${{ github.sha }}" >> $GITHUB_ENV
+
       - name: Run Trivy Image Scan (Fixed)
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: "${{ env.IMAGE_TAG }}"  # ✅ Ensuring the correct image is scanned
+          image-ref: "${{ env.IMAGE_TAG }}"  # ✅ Ensuring Trivy scans the correct image
           format: 'table'
           severity: 'HIGH,CRITICAL'
 
