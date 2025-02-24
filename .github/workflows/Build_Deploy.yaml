@@ -83,14 +83,22 @@ jobs:
     runs-on: self-hosted
     needs: code-scan
     steps:
+      - name: Validate Image Tag
+        run: |
+          echo "Using Image Tag: $IMAGE_TAG"
+          if [[ -z "$IMAGE_TAG" ]]; then
+            echo "❌ IMAGE_TAG is empty!"
+            exit 1
+          fi
+
       - name: Build Docker Image
         run: |
-          docker build -t $IMAGE_TAG \
+          docker build -t $IMAGE_TAG . \
             --build-arg MAPBOX_TOKEN="${{ secrets.MAPBOX_TOKEN }}" \
             --build-arg DB_URL="${{ secrets.DB_URL }}" \
             --build-arg CLOUDINARY_CLOUD_NAME="${{ secrets.CLOUDINARY_CLOUD_NAME }}" \
             --build-arg CLOUDINARY_KEY="${{ secrets.CLOUDINARY_KEY }}" \
-            --build-arg CLOUDINARY_SECRET="${{ secrets.CLOUDINARY_SECRET }}" .
+            --build-arg CLOUDINARY_SECRET="${{ secrets.CLOUDINARY_SECRET }}"
 
   trivy_scan:
     name: 🛡️ Trivy Security Scan
@@ -100,7 +108,7 @@ jobs:
       - name: Run Trivy Image Scan
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: $IMAGE_TAG  # ✅ Now scanning the correct image
+          image-ref: ${{ env.IMAGE_TAG }}  # ✅ Now scanning the correct image
           format: 'table'
           severity: 'HIGH,CRITICAL'
 
