@@ -78,7 +78,7 @@ jobs:
     runs-on: self-hosted
     needs: docker_build
     steps:
-      - name: **Debug IMAGE_TAG_SHA Before Scanning**
+      - name: Debug IMAGE_TAG_SHA Before Scanning
         run: |
           echo "🔍 Trivy will scan: $IMAGE_TAG_SHA"
           if [[ -z "$IMAGE_TAG_SHA" ]]; then
