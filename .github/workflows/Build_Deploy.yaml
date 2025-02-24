@@ -112,7 +112,8 @@ jobs:
       - name: Load Image Tag
         run: |
           IMAGE_TAG_SHA=$(cat image_tag.txt)
-          echo "Pushing Image: $IMAGE_TAG_SHA"
+          echo "🚀 Pushing Image: $IMAGE_TAG_SHA"
+          echo "IMAGE_TAG_SHA=$IMAGE_TAG_SHA" >> $GITHUB_ENV
 
       - name: Login to Docker Hub
         uses: docker/login-action@v2
@@ -123,7 +124,7 @@ jobs:
       - name: Push Docker Image
         run: docker push $IMAGE_TAG_SHA
 
-      - name: Cleanup Image Tag File After All Jobs
+      - name: Cleanup Image Tag File After Push
         run: rm -f image_tag.txt
 
   update_k8s_manifest:
