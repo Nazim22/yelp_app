@@ -55,9 +55,10 @@ jobs:
     needs: code-scan
     steps:
       - name: Define Image Tag
-        run: echo "${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:${{ github.sha }}" > image_tag.txt
+        run: |
+          echo "${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:${{ github.sha }}" > image_tag.txt
 
-      - name: Upload Image Tag as an Artifact  # ✅ Save file for later jobs
+      - name: Upload Image Tag as an Artifact  # ✅ Save for later jobs
         uses: actions/upload-artifact@v4  # ✅ Updated version
         with:
           name: image-tag
@@ -78,13 +79,12 @@ jobs:
     needs: docker_build
     steps:
       - name: Download Image Tag
-        uses: actions/download-artifact@v4  # ✅ Updated version
+        uses: actions/download-artifact@v4
         with:
           name: image-tag
 
       - name: Load Image Tag for Trivy
         run: echo "IMAGE_TAG_SHA=$(cat image_tag.txt)" >> $GITHUB_ENV
-        shell: bash
 
       - name: Run Trivy Image Scan
         uses: aquasecurity/trivy-action@master
@@ -99,7 +99,7 @@ jobs:
     needs: trivy_scan
     steps:
       - name: Download Image Tag
-        uses: actions/download-artifact@v4  # ✅ Updated version
+        uses: actions/download-artifact@v4
         with:
           name: image-tag
 
@@ -118,7 +118,7 @@ jobs:
     needs: docker_push
     steps:
       - name: Download Image Tag
-        uses: actions/download-artifact@v4  # ✅ Updated version
+        uses: actions/download-artifact@v4
         with:
           name: image-tag
 
@@ -128,10 +128,17 @@ jobs:
           repository: Nazim22/yelp-app-k8s  # ✅ External Kubernetes repo
           token: ${{ secrets.GH_PAT }}
 
+      - name: Verify `image_tag.txt` Exists
+        run: |
+          if [ ! -f image_tag.txt ]; then
+            echo "❌ Error: image_tag.txt not found! Exiting..."
+            exit 1
+          fi
+
       - name: Run Manifest Update Script
         run: |
           chmod +x update-k8s-manifest.sh
-          ./update-k8s-manifest.sh
+          ./update-k8s-manifest.sh "$(cat image_tag.txt)"
 
       - name: Commit and Push Updated Manifest
         run: |
@@ -148,7 +155,7 @@ jobs:
     needs: update_k8s_manifest
     steps:
       - name: Download Image Tag
-        uses: actions/download-artifact@v4  # ✅ Updated version
+        uses: actions/download-artifact@v4
         with:
           name: image-tag
 
