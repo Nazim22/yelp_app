@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: yelp-app
-        image: docker.io/dockeruser2068/yelp-app:latest
+        image: 
         ports:
         - containerPort: 3000
         envFrom:
