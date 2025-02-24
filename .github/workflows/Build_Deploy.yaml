@@ -1,7 +1,7 @@
 name: CI/CD Workflow
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:  
   push:
     branches:
       - main
@@ -10,7 +10,7 @@ on:
       - main
 
 permissions:
-  contents: write
+  contents: write  
 
 jobs:
   checkout:
@@ -68,18 +68,17 @@ jobs:
             --build-arg CLOUDINARY_KEY="${{ secrets.CLOUDINARY_KEY }}" \
             --build-arg CLOUDINARY_SECRET="${{ secrets.CLOUDINARY_SECRET }}"
 
-      - name: Verify Built Image Locally (Fix)
+      - name: Verify Built Image Locally
         run: |
-          docker images
           if [[ "$(docker images -q $IMAGE_TAG_SHA 2> /dev/null)" == "" ]]; then
-            echo "❌ Image Not Found Locally!"
+            echo "❌ Image Not Found!"
             exit 1
           else
             echo "✅ Image $IMAGE_TAG_SHA Found!"
           fi
 
   trivy_scan:
-    name: 🛡️ Trivy Security Scan (Fixed)
+    name: 🛡️ Trivy Security Scan
     runs-on: self-hosted
     needs: docker_build
     steps:
