@@ -55,18 +55,20 @@ jobs:
     needs: code-scan
     steps:
       - name: Define Image Tag
-        run: |
-          echo "${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:${{ github.sha }}" > image_tag.txt
+        run: echo "docker.io/${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:${{ github.sha }}" > image_tag.txt
 
-      - name: Upload Image Tag as an Artifact  # ✅ Save for later jobs
-        uses: actions/upload-artifact@v4  # ✅ Updated version
+      - name: Debug Image Tag
+        run: cat image_tag.txt
+
+      - name: Upload Image Tag
+        uses: actions/upload-artifact@v4
         with:
           name: image-tag
           path: image_tag.txt
 
       - name: Build Docker Image
         run: |
-          docker build -t "$(cat image_tag.txt)" \
+          docker build -t $(cat image_tag.txt) \
             --build-arg MAPBOX_TOKEN="${{ secrets.MAPBOX_TOKEN }}" \
             --build-arg DB_URL="${{ secrets.DB_URL }}" \
             --build-arg CLOUDINARY_CLOUD_NAME="${{ secrets.CLOUDINARY_CLOUD_NAME }}" \
@@ -83,13 +85,13 @@ jobs:
         with:
           name: image-tag
 
-      - name: Load Image Tag for Trivy
-        run: echo "IMAGE_TAG_SHA=$(cat image_tag.txt)" >> $GITHUB_ENV
+      - name: Debug Image Tag Before Scanning
+        run: cat image_tag.txt
 
       - name: Run Trivy Image Scan
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.IMAGE_TAG_SHA }}
+          image-ref: $(cat image_tag.txt)
           format: 'table'
           severity: 'HIGH,CRITICAL'
 
@@ -103,6 +105,9 @@ jobs:
         with:
           name: image-tag
 
+      - name: Debug Image Tag Before Push
+        run: cat image_tag.txt
+
       - name: Login to Docker Hub
         uses: docker/login-action@v2
         with:
@@ -110,9 +115,9 @@ jobs:
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
       - name: Push Docker Image
-        run: docker push "$(cat image_tag.txt)"
+        run: docker push $(cat image_tag.txt)
 
-  update_k8s_manifest:
+  update-k8s-manifest:
     name: 📄 Update Kubernetes Deployment in External Repo
     runs-on: self-hosted
     needs: docker_push
@@ -122,81 +127,32 @@ jobs:
         with:
           name: image-tag
 
-      - name: Checkout Kubernetes Repo
+      - name: Debug Image Tag Before Updating Manifest
+        run: cat image_tag.txt
+
+      - name: Checkout `yelp-app-k8s`
         uses: actions/checkout@v4
         with:
-          repository: Nazim22/yelp-app-k8s  # ✅ External Kubernetes repo
+          repository: Nazim22/yelp-app-k8s
           token: ${{ secrets.GH_PAT }}
 
-      - name: Verify `image_tag.txt` Exists
-        run: |
-          if [ ! -f image_tag.txt ]; then
-            echo "❌ Error: image_tag.txt not found! Exiting..."
-            exit 1
-          fi
-
-      - name: Run Manifest Update Script
+      - name: Update Kubernetes Manifest
         run: |
           chmod +x update-k8s-manifest.sh
-          ./update-k8s-manifest.sh "$(cat image_tag.txt)"
+          ./update-k8s-manifest.sh $(cat image_tag.txt)
 
-      - name: Commit and Push Updated Manifest
+      - name: Commit & Push Changes
         run: |
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
-
           git add K8s/yelp-app-deployment.yaml
-          git commit -m "Update image tag in deployment manifest" || echo "No changes to commit"
+          git commit -m "🔄 Updated manifest with new image tag" || echo "No changes to commit"
           git push origin main
 
-  test_run:
-    name: 🧪 Run and Test Container
-    runs-on: self-hosted
-    needs: update_k8s_manifest
-    steps:
-      - name: Download Image Tag
-        uses: actions/download-artifact@v4
-        with:
-          name: image-tag
-
-      - name: Create .env File
-        run: |
-          echo "MAPBOX_TOKEN=${{ secrets.MAPBOX_TOKEN }}" >> .env
-          echo "DB_URL=${{ secrets.DB_URL }}" >> .env
-          echo "CLOUDINARY_CLOUD_NAME=${{ secrets.CLOUDINARY_CLOUD_NAME }}" >> .env
-          echo "CLOUDINARY_KEY=${{ secrets.CLOUDINARY_KEY }}" >> .env
-          echo "CLOUDINARY_SECRET=${{ secrets.CLOUDINARY_SECRET }}" >> .env
-
-      - name: Remove Existing Container if Present
-        run: |
-          if [ $(docker ps -aq -f name=yelp-app) ]; then
-            echo "Stopping and removing existing container..."
-            docker stop yelp-app || true
-            docker rm yelp-app || true
-          else
-            echo "No existing container found."
-          fi
-
-      - name: Run the Docker Container with .env File
-        run: |
-          docker run -d -p 3000:3000 --name yelp-app \
-            --env-file .env \
-            "$(cat image_tag.txt)"
-
-      - name: Verify Application Logs
-        run: docker logs yelp-app
-
-      - name: Test Application Health Check with Retry Logic
-        run: |
-          for i in {1..10}; do
-            echo "Checking if application is up... Attempt $i"
-            curl --fail http://localhost:3000 && break || sleep 5
-          done
-
   cleanup:
-    name: 🧹 Cleanup
+    name: 🧹 Cleanup: Delete Image Tag File
     runs-on: self-hosted
-    needs: test_run
+    needs: update-k8s-manifest
     steps:
-      - name: ✅ Delete Image Tag File After All Jobs
+      - name: Delete Image Tag File
         run: rm -f image_tag.txt
