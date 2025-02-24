@@ -55,21 +55,21 @@ jobs:
     needs: code_scan
     steps:
       - name: Define Image Tag
-        run: echo "${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:${{ github.sha }}" > image_tag.txt
-
-      - name: Debug Image Tag
-        run: cat image_tag.txt
+        run: |
+          IMAGE_TAG_SHA=${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:${{ github.sha }}
+          echo "IMAGE_TAG_SHA=$IMAGE_TAG_SHA" >> $GITHUB_ENV
+          echo $IMAGE_TAG_SHA > image_tag.txt
 
       - name: Build Docker Image
         run: |
-          docker build -t $(cat image_tag.txt) \
+          docker build -t $IMAGE_TAG_SHA \
             --build-arg MAPBOX_TOKEN="${{ secrets.MAPBOX_TOKEN }}" \
             --build-arg DB_URL="${{ secrets.DB_URL }}" \
             --build-arg CLOUDINARY_CLOUD_NAME="${{ secrets.CLOUDINARY_CLOUD_NAME }}" \
             --build-arg CLOUDINARY_KEY="${{ secrets.CLOUDINARY_KEY }}" \
             --build-arg CLOUDINARY_SECRET="${{ secrets.CLOUDINARY_SECRET }}" .
 
-      - name: Upload Image Tag File
+      - name: Upload Image Tag as Artifact
         uses: actions/upload-artifact@v4
         with:
           name: image-tag
@@ -80,39 +80,39 @@ jobs:
     runs-on: self-hosted
     needs: docker_build
     steps:
-      - name: Download Image Tag File
+      - name: Download Image Tag Artifact
         uses: actions/download-artifact@v4
         with:
           name: image-tag
 
       - name: Load Image Tag
-        run: echo "IMAGE_TAG=$(cat image_tag.txt)" >> $GITHUB_ENV
+        run: |
+          IMAGE_TAG_SHA=$(cat image_tag.txt)
+          echo "Scanning image: $IMAGE_TAG_SHA"
+          echo "IMAGE_TAG_SHA=$IMAGE_TAG_SHA" >> $GITHUB_ENV
 
-      - name: Debug Trivy Scan
-        run: echo "Trivy scanning image: $IMAGE_TAG"
-
-      - name: Run Trivy Scan
+      - name: Run Trivy Image Scan
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.IMAGE_TAG }}
+          image-ref: ${{ env.IMAGE_TAG_SHA }}
           format: 'table'
           severity: 'HIGH,CRITICAL'
 
   docker_push:
-    name: 🚀 Push Docker Image
+    name: 🚀 Push Docker Image to Docker Hub
     runs-on: self-hosted
     needs: trivy_scan
     steps:
-      - name: Download Image Tag File
+      - name: Download Image Tag Artifact
         uses: actions/download-artifact@v4
         with:
           name: image-tag
 
       - name: Load Image Tag
-        run: echo "IMAGE_TAG=$(cat image_tag.txt)" >> $GITHUB_ENV
-
-      - name: Debug Pushing Image
-        run: echo "Pushing image: $IMAGE_TAG"
+        run: |
+          IMAGE_TAG_SHA=$(cat image_tag.txt)
+          echo "Pushing image: $IMAGE_TAG_SHA"
+          echo "IMAGE_TAG_SHA=$IMAGE_TAG_SHA" >> $GITHUB_ENV
 
       - name: Login to Docker Hub
         uses: docker/login-action@v2
@@ -121,33 +121,36 @@ jobs:
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
       - name: Push Docker Image
-        run: docker push $IMAGE_TAG
+        run: docker push $IMAGE_TAG_SHA
 
   update_k8s_manifest:
     name: 📄 Update Kubernetes Deployment in External Repo
     runs-on: self-hosted
     needs: docker_push
     steps:
-      - name: Download Image Tag File
-        uses: actions/download-artifact@v4
-        with:
-          name: image-tag
-
-      - name: Load Image Tag
-        run: echo "IMAGE_TAG=$(cat image_tag.txt)" >> $GITHUB_ENV
-
-      - name: Checkout K8s Repo
+      - name: Checkout Kubernetes Repo
         uses: actions/checkout@v4
         with:
           repository: Nazim22/yelp-app-k8s
           token: ${{ secrets.GH_PAT }}
           path: yelp-app-k8s
 
-      - name: Update Image Tag in Manifest
+      - name: Download Image Tag Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: image-tag
+
+      - name: Load Image Tag
+        run: |
+          IMAGE_TAG_SHA=$(cat image_tag.txt)
+          echo "Updating Kubernetes manifest with: $IMAGE_TAG_SHA"
+          echo "IMAGE_TAG_SHA=$IMAGE_TAG_SHA" >> $GITHUB_ENV
+
+      - name: Run Update Script
         run: |
           cd yelp-app-k8s/K8s
-          sed -i "s|image: .*yelp-app:.*|image: $IMAGE_TAG|" yelp-app-deployment.yaml
-          cat yelp-app-deployment.yaml  # ✅ Debugging
+          chmod +x update-k8s-manifest.sh
+          ./update-k8s-manifest.sh
 
       - name: Commit and Push Updated Manifest
         run: |
@@ -155,7 +158,7 @@ jobs:
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
           git add K8s/yelp-app-deployment.yaml
-          git commit -m "Update image tag to $IMAGE_TAG" || echo "No changes to commit"
+          git commit -m "Update image tag to $IMAGE_TAG_SHA" || echo "No changes to commit"
           git push origin main
 
   test_run:
@@ -163,37 +166,30 @@ jobs:
     runs-on: self-hosted
     needs: update_k8s_manifest
     steps:
-      - name: Download Image Tag File
+      - name: Download Image Tag Artifact
         uses: actions/download-artifact@v4
         with:
           name: image-tag
 
       - name: Load Image Tag
-        run: echo "IMAGE_TAG=$(cat image_tag.txt)" >> $GITHUB_ENV
+        run: |
+          IMAGE_TAG_SHA=$(cat image_tag.txt)
+          echo "Running container with image: $IMAGE_TAG_SHA"
+          echo "IMAGE_TAG_SHA=$IMAGE_TAG_SHA" >> $GITHUB_ENV
 
       - name: Create .env File
         run: |
-          echo "MAPBOX_TOKEN=${{ secrets.MAPBOX_TOKEN }}" > .env
+          echo "MAPBOX_TOKEN=${{ secrets.MAPBOX_TOKEN }}" >> .env
           echo "DB_URL=${{ secrets.DB_URL }}" >> .env
           echo "CLOUDINARY_CLOUD_NAME=${{ secrets.CLOUDINARY_CLOUD_NAME }}" >> .env
           echo "CLOUDINARY_KEY=${{ secrets.CLOUDINARY_KEY }}" >> .env
           echo "CLOUDINARY_SECRET=${{ secrets.CLOUDINARY_SECRET }}" >> .env
 
-      - name: Remove Existing Container
-        run: |
-          if [ $(docker ps -aq -f name=yelp-app) ]; then
-            docker stop yelp-app || true
-            docker rm yelp-app || true
-          fi
-
       - name: Run the Docker Container
         run: |
           docker run -d -p 3000:3000 --name yelp-app \
             --env-file .env \
-            $IMAGE_TAG
-
-      - name: Verify Application Logs
-        run: docker logs yelp-app
+            $IMAGE_TAG_SHA
 
       - name: Test Application Health Check
         run: |
