@@ -58,14 +58,8 @@ jobs:
         run: |
           IMAGE_TAG_SHA="${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:$(git rev-parse --short HEAD)"
           echo "IMAGE_TAG_SHA=$IMAGE_TAG_SHA" >> $GITHUB_ENV
-          echo $IMAGE_TAG_SHA > image_tag.txt
-          echo "✅ Image Tag Created: $IMAGE_TAG_SHA"
-
-      - name: Save Image Tag as Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: image-tag
-          path: image_tag.txt
+          echo "$IMAGE_TAG_SHA" > image_tag.txt
+          echo "🔄 Image Tag: $IMAGE_TAG_SHA"
 
       - name: Build Docker Image
         run: |
@@ -75,6 +69,12 @@ jobs:
             --build-arg CLOUDINARY_CLOUD_NAME="${{ secrets.CLOUDINARY_CLOUD_NAME }}" \
             --build-arg CLOUDINARY_KEY="${{ secrets.CLOUDINARY_KEY }}" \
             --build-arg CLOUDINARY_SECRET="${{ secrets.CLOUDINARY_SECRET }}" .
+
+      - name: Upload Image Tag Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-tag
+          path: image_tag.txt
 
   trivy_scan:
     name: 🛡️ Trivy Security Scan
@@ -92,7 +92,7 @@ jobs:
           echo "🔍 Trivy will scan: $IMAGE_TAG_SHA"
           echo "IMAGE_TAG_SHA=$IMAGE_TAG_SHA" >> $GITHUB_ENV
 
-      - name: Run Trivy Image Scan
+      - name: Run Trivy Scan
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ env.IMAGE_TAG_SHA }}
@@ -112,7 +112,7 @@ jobs:
       - name: Load Image Tag
         run: |
           IMAGE_TAG_SHA=$(cat image_tag.txt)
-          echo "🚀 Pushing Image: $IMAGE_TAG_SHA"
+          echo "🔄 Pushing Image: $IMAGE_TAG_SHA"
           echo "IMAGE_TAG_SHA=$IMAGE_TAG_SHA" >> $GITHUB_ENV
 
       - name: Login to Docker Hub
@@ -123,9 +123,6 @@ jobs:
 
       - name: Push Docker Image
         run: docker push $IMAGE_TAG_SHA
-
-      - name: Cleanup Image Tag File After Push
-        run: rm -f image_tag.txt
 
   update_k8s_manifest:
     name: 📄 Update Kubernetes Deployment with New Image Tag
@@ -146,35 +143,45 @@ jobs:
         run: |
           IMAGE_TAG_SHA=$(cat image_tag.txt)
           echo "🔄 Updating Kubernetes manifest with image: $IMAGE_TAG_SHA"
+          echo "IMAGE_TAG_SHA=$IMAGE_TAG_SHA" >> $GITHUB_ENV
+
+      - name: Debug - Show Deployment YAML Before Change
+        run: cat K8s/yelp-app-deployment.yaml
 
       - name: Update Image Tag in Kubernetes Deployment
         run: |
-          sed -i "s|image: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:.*|image: $IMAGE_TAG_SHA|" K8s/yelp-app-deployment.yaml
+          sed -i "s|image: .*yelp-app:.*|image: $IMAGE_TAG_SHA|" K8s/yelp-app-deployment.yaml
+
+      - name: Debug - Show Deployment YAML After Change
+        run: cat K8s/yelp-app-deployment.yaml
 
       - name: Commit and Push Updated Manifest
         run: |
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
 
-          git add K8s/yelp-app-deployment.yaml
-          git commit -m "Update image tag to $IMAGE_TAG_SHA" || echo "No changes to commit"
-
-          git push origin main
+          git add K8s/yelp-app-deployment.yaml || echo "❌ File not found!"
+          git status  # ✅ Show status before committing
+          
+          if git diff --cached --quiet; then
+            echo "⚠️ No changes detected in manifest. Skipping commit."
+          else
+            git commit -m "🚀 Update image tag to $IMAGE_TAG_SHA"
+            git push origin main
+          fi
 
   test_run:
     name: 🧪 Run and Test Container
     runs-on: self-hosted
     needs: update_k8s_manifest
     steps:
-      - name: Download Image Tag Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: image-tag
-
-      - name: Load Image Tag
+      - name: Create .env File
         run: |
-          IMAGE_TAG_SHA=$(cat image_tag.txt)
-          echo "✅ Using Image: $IMAGE_TAG_SHA"
+          echo "MAPBOX_TOKEN=${{ secrets.MAPBOX_TOKEN }}" >> .env
+          echo "DB_URL=${{ secrets.DB_URL }}" >> .env
+          echo "CLOUDINARY_CLOUD_NAME=${{ secrets.CLOUDINARY_CLOUD_NAME }}" >> .env
+          echo "CLOUDINARY_KEY=${{ secrets.CLOUDINARY_KEY }}" >> .env
+          echo "CLOUDINARY_SECRET=${{ secrets.CLOUDINARY_SECRET }}" >> .env
 
       - name: Remove Existing Container if Present
         run: |
