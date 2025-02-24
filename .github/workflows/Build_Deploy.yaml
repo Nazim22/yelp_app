@@ -1,7 +1,7 @@
 name: CI/CD Workflow
 
 on:
-  workflow_dispatch:  # ✅ Manually triggered workflow
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -10,7 +10,7 @@ on:
       - main
 
 permissions:
-  contents: write  # ✅ Allows pushing manifest updates
+  contents: write
 
 jobs:
   checkout:
@@ -83,12 +83,14 @@ jobs:
     steps:
       - name: Verify Image Exists Before Scanning
         run: |
-          docker images | grep $(echo $IMAGE_TAG_SHA | cut -d':' -f1) || (echo "❌ Image Not Found!" && exit 1)
+          echo "Checking if image exists: $IMAGE_TAG_SHA"
+          docker image inspect $IMAGE_TAG_SHA > /dev/null 2>&1 \
+            || (echo "❌ Image Not Found!" && exit 1)
 
       - name: Run Trivy Image Scan
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.IMAGE_TAG_SHA }}  # ✅ Scans SHA-tagged image
+          image-ref: ${{ env.IMAGE_TAG_SHA }}
           format: 'table'
           severity: 'HIGH,CRITICAL'
 
