@@ -58,7 +58,7 @@ jobs:
         run: echo "${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:${{ github.sha }}" > image_tag.txt
 
       - name: Upload Image Tag as an Artifact  # ✅ Save file for later jobs
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4  # ✅ Updated version
         with:
           name: image-tag
           path: image_tag.txt
@@ -78,7 +78,7 @@ jobs:
     needs: docker_build
     steps:
       - name: Download Image Tag
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4  # ✅ Updated version
         with:
           name: image-tag
 
@@ -99,7 +99,7 @@ jobs:
     needs: trivy_scan
     steps:
       - name: Download Image Tag
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4  # ✅ Updated version
         with:
           name: image-tag
 
@@ -118,7 +118,7 @@ jobs:
     needs: docker_push
     steps:
       - name: Download Image Tag
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4  # ✅ Updated version
         with:
           name: image-tag
 
@@ -148,7 +148,7 @@ jobs:
     needs: update_k8s_manifest
     steps:
       - name: Download Image Tag
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4  # ✅ Updated version
         with:
           name: image-tag
 
