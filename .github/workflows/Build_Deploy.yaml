@@ -148,7 +148,7 @@ jobs:
 
       - name: Run Update Script
         run: |
-          cd yelp-app-k8s/K8s
+        
           chmod +x update-k8s-manifest.sh
           ./update-k8s-manifest.sh
 
