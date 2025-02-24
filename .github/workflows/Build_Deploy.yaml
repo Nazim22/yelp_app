@@ -33,7 +33,7 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-  code_scan:
+  code-scan:
     name: 🔍 SonarQube Code Analysis
     runs-on: self-hosted
     needs: build
@@ -50,22 +50,18 @@ jobs:
             -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }}
 
   docker_build:
-    name: 🐳 Build Docker Image
+    name: 🐳 Build Docker Image with Unique Tag
     runs-on: self-hosted
-    needs: code_scan
+    needs: code-scan
     steps:
-      - name: Define Image Tags
+      - name: Define Image Tag
         run: |
-          IMAGE_TAG="${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:latest"
-          IMAGE_TAG_SHA="${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:${{ github.sha }}"
-
-          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+          IMAGE_TAG_SHA="${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:$(git rev-parse --short HEAD)"
           echo "IMAGE_TAG_SHA=$IMAGE_TAG_SHA" >> $GITHUB_ENV
+          echo $IMAGE_TAG_SHA > image_tag.txt
+          echo "✅ Image Tag Created: $IMAGE_TAG_SHA"
 
-          # ✅ Save to file for later jobs
-          echo "$IMAGE_TAG_SHA" > image_tag.txt
-          
-      - name: Upload Image Tag as Artifact
+      - name: Save Image Tag as Artifact
         uses: actions/upload-artifact@v4
         with:
           name: image-tag
@@ -73,19 +69,19 @@ jobs:
 
       - name: Build Docker Image
         run: |
-          docker build -t $IMAGE_TAG -t $IMAGE_TAG_SHA . \
+          docker build -t $IMAGE_TAG_SHA \
             --build-arg MAPBOX_TOKEN="${{ secrets.MAPBOX_TOKEN }}" \
             --build-arg DB_URL="${{ secrets.DB_URL }}" \
             --build-arg CLOUDINARY_CLOUD_NAME="${{ secrets.CLOUDINARY_CLOUD_NAME }}" \
             --build-arg CLOUDINARY_KEY="${{ secrets.CLOUDINARY_KEY }}" \
-            --build-arg CLOUDINARY_SECRET="${{ secrets.CLOUDINARY_SECRET }}"
+            --build-arg CLOUDINARY_SECRET="${{ secrets.CLOUDINARY_SECRET }}" .
 
   trivy_scan:
     name: 🛡️ Trivy Security Scan
     runs-on: self-hosted
     needs: docker_build
     steps:
-      - name: Download Image Tag
+      - name: Download Image Tag Artifact
         uses: actions/download-artifact@v4
         with:
           name: image-tag
@@ -93,14 +89,8 @@ jobs:
       - name: Load Image Tag
         run: |
           IMAGE_TAG_SHA=$(cat image_tag.txt)
-          echo "IMAGE_TAG_SHA=$IMAGE_TAG_SHA" >> $GITHUB_ENV
-          
-          if [[ -z "$IMAGE_TAG_SHA" ]]; then
-            echo "❌ IMAGE_TAG_SHA is empty! Exiting."
-            exit 1
-          fi
-          
           echo "🔍 Trivy will scan: $IMAGE_TAG_SHA"
+          echo "IMAGE_TAG_SHA=$IMAGE_TAG_SHA" >> $GITHUB_ENV
 
       - name: Run Trivy Image Scan
         uses: aquasecurity/trivy-action@master
@@ -114,7 +104,7 @@ jobs:
     runs-on: self-hosted
     needs: trivy_scan
     steps:
-      - name: Download Image Tag
+      - name: Download Image Tag Artifact
         uses: actions/download-artifact@v4
         with:
           name: image-tag
@@ -122,18 +112,18 @@ jobs:
       - name: Load Image Tag
         run: |
           IMAGE_TAG_SHA=$(cat image_tag.txt)
-          echo "IMAGE_TAG_SHA=$IMAGE_TAG_SHA" >> $GITHUB_ENV
-          
           echo "Pushing Image: $IMAGE_TAG_SHA"
 
-      - name: ✅ Login to Docker Hub (Fixes Access Denied Issue)
-        run: |
-          echo "${{ secrets.DOCKERHUB_PASSWORD }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
-      - name: ✅ Push Docker Image to Docker Hub
+      - name: Push Docker Image
         run: docker push $IMAGE_TAG_SHA
 
-      - name: Cleanup Image Tag File After Push
+      - name: Cleanup Image Tag File After All Jobs
         run: rm -f image_tag.txt
 
   update_k8s_manifest:
@@ -144,7 +134,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GH_PAT }}  # ✅ Use personal access token
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Download Image Tag Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: image-tag
+
+      - name: Load Image Tag
+        run: |
+          IMAGE_TAG_SHA=$(cat image_tag.txt)
+          echo "🔄 Updating Kubernetes manifest with image: $IMAGE_TAG_SHA"
 
       - name: Update Image Tag in Kubernetes Deployment
         run: |
@@ -158,20 +158,22 @@ jobs:
           git add K8s/yelp-app-deployment.yaml
           git commit -m "Update image tag to $IMAGE_TAG_SHA" || echo "No changes to commit"
 
-          git push origin main  # ✅ Uses GH_PAT to authenticate push
+          git push origin main
 
   test_run:
     name: 🧪 Run and Test Container
     runs-on: self-hosted
     needs: update_k8s_manifest
     steps:
-      - name: Create .env File
+      - name: Download Image Tag Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: image-tag
+
+      - name: Load Image Tag
         run: |
-          echo "MAPBOX_TOKEN=${{ secrets.MAPBOX_TOKEN }}" >> .env
-          echo "DB_URL=${{ secrets.DB_URL }}" >> .env
-          echo "CLOUDINARY_CLOUD_NAME=${{ secrets.CLOUDINARY_CLOUD_NAME }}" >> .env
-          echo "CLOUDINARY_KEY=${{ secrets.CLOUDINARY_KEY }}" >> .env
-          echo "CLOUDINARY_SECRET=${{ secrets.CLOUDINARY_SECRET }}" >> .env
+          IMAGE_TAG_SHA=$(cat image_tag.txt)
+          echo "✅ Using Image: $IMAGE_TAG_SHA"
 
       - name: Remove Existing Container if Present
         run: |
