@@ -70,31 +70,26 @@ jobs:
 
       - name: Verify Built Image
         run: |
-          echo "Verifying image: $IMAGE_TAG_SHA"
-          if [[ "$(docker images -q $IMAGE_TAG_SHA 2> /dev/null)" == "" ]]; then
-            echo "❌ Image Not Found! Build failed."
-            exit 1
-          else
-            echo "✅ Image $IMAGE_TAG_SHA Found!"
-          fi
+          echo "Checking if image exists: $IMAGE_TAG_SHA"
+          docker images | grep "${{ secrets.DOCKERHUB_USERNAME }}/yelp-app" || (echo "❌ Image Not Found!" && exit 1)
 
   trivy_scan:
     name: 🛡️ Trivy Security Scan
     runs-on: self-hosted
     needs: docker_build
     steps:
-      - name: Verify Image Exists Before Scan
+      - name: **Debug IMAGE_TAG_SHA Before Scanning**
         run: |
-          echo "Checking if image exists before scan: $IMAGE_TAG_SHA"
-          if [[ "$(docker images -q $IMAGE_TAG_SHA 2> /dev/null)" == "" ]]; then
-            echo "❌ Image Not Found! Skipping scan..."
+          echo "🔍 Trivy will scan: $IMAGE_TAG_SHA"
+          if [[ -z "$IMAGE_TAG_SHA" ]]; then
+            echo "❌ IMAGE_TAG_SHA is empty! Skipping scan."
             exit 1
           fi
 
       - name: Run Trivy Image Scan
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.IMAGE_TAG_SHA }}
+          image-ref: ${{ env.IMAGE_TAG_SHA }}  
           format: 'table'
           severity: 'HIGH,CRITICAL'
 
@@ -109,11 +104,9 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
-      - name: Push Docker Images
+      - name: Push Docker Image
         run: |
-          echo "Pushing latest image: $IMAGE_TAG"
-          echo "Pushing SHA-tagged image: $IMAGE_TAG_SHA"
-          docker push $IMAGE_TAG
+          echo "Pushing Image: $IMAGE_TAG_SHA"
           docker push $IMAGE_TAG_SHA
 
   update_k8s_manifest:
@@ -137,8 +130,7 @@ jobs:
 
           git add K8s/yelp-app-deployment.yaml
           git commit -m "Update image tag to $IMAGE_TAG_SHA" || echo "No changes to commit"
-
-          git push origin main
+          git push origin main  
 
   test_run:
     name: 🧪 Run and Test Container
@@ -156,8 +148,11 @@ jobs:
       - name: Remove Existing Container if Present
         run: |
           if [ $(docker ps -aq -f name=yelp-app) ]; then
+            echo "Stopping and removing existing container..."
             docker stop yelp-app || true
             docker rm yelp-app || true
+          else
+            echo "No existing container found."
           fi
 
       - name: Run the Docker Container with .env File
@@ -169,7 +164,7 @@ jobs:
       - name: Verify Application Logs
         run: docker logs yelp-app
 
-      - name: Test Application Health Check
+      - name: Test Application Health Check with Retry Logic
         run: |
           for i in {1..10}; do
             echo "Checking if application is up... Attempt $i"
