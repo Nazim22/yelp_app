@@ -153,17 +153,9 @@ jobs:
           echo "Updating Kubernetes manifest with image: $IMAGE_TAG_SHA"
           echo "IMAGE_TAG_SHA=$IMAGE_TAG_SHA" >> $GITHUB_ENV
 
-      - name: Verify Script Exists Before Running
-        run: |
-          ls -lah
-          if [ ! -f ./update-k8s-manifest.sh ]; then
-            echo "❌ Error: update-k8s-manifest.sh not found!"
-            exit 1
-          fi
-
       - name: Run Update Script
         run: |
-          chmod +x update-k8s-manifest.sh
+          chmod +x ./update-k8s-manifest.sh
           ./update-k8s-manifest.sh "$IMAGE_TAG_SHA"
 
       - name: Commit and Push Updated Manifest
