@@ -1,7 +1,7 @@
 name: CI/CD Workflow
 
 on:
-  workflow_dispatch:  # ✅ Manually triggered workflow
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -10,7 +10,7 @@ on:
       - main
 
 permissions:
-  contents: write  # ✅ Allows pushing manifest updates
+  contents: write
 
 jobs:
   checkout:
@@ -33,7 +33,7 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-  code_scan:
+  code-scan:
     name: 🔍 SonarQube Code Analysis
     runs-on: self-hosted
     needs: build
@@ -50,9 +50,9 @@ jobs:
             -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }}
 
   docker_build:
-    name: 🐳 Build Docker Image
+    name: 🐳 Build Docker Image with Unique Tag
     runs-on: self-hosted
-    needs: code_scan
+    needs: code-scan
     steps:
       - name: Define Image Tag
         run: |
@@ -133,32 +133,31 @@ jobs:
         with:
           repository: Nazim22/yelp-app-k8s
           token: ${{ secrets.GH_PAT }}
-          path: yelp-app-k8s
 
       - name: Download Image Tag Artifact
         uses: actions/download-artifact@v4
         with:
           name: image-tag
 
-      - name: Load Image Tag
+      - name: Verify Script Exists Before Running
         run: |
-          IMAGE_TAG_SHA=$(cat image_tag.txt)
-          echo "Updating Kubernetes manifest with: $IMAGE_TAG_SHA"
-          echo "IMAGE_TAG_SHA=$IMAGE_TAG_SHA" >> $GITHUB_ENV
+          ls -lah
+          if [ ! -f ./update-k8s-manifest.sh ]; then
+            echo "❌ Error: update-k8s-manifest.sh not found!"
+            exit 1
+          fi
 
       - name: Run Update Script
         run: |
-        
           chmod +x update-k8s-manifest.sh
           ./update-k8s-manifest.sh
 
       - name: Commit and Push Updated Manifest
         run: |
-          cd yelp-app-k8s
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
           git add K8s/yelp-app-deployment.yaml
-          git commit -m "Update image tag to $IMAGE_TAG_SHA" || echo "No changes to commit"
+          git commit -m "Update image tag in deployment manifest" || echo "No changes to commit"
           git push origin main
 
   test_run:
@@ -185,11 +184,24 @@ jobs:
           echo "CLOUDINARY_KEY=${{ secrets.CLOUDINARY_KEY }}" >> .env
           echo "CLOUDINARY_SECRET=${{ secrets.CLOUDINARY_SECRET }}" >> .env
 
-      - name: Run the Docker Container
+      - name: Remove Existing Container if Present
+        run: |
+          if [ $(docker ps -aq -f name=yelp-app) ]; then
+            echo "Stopping and removing existing container..."
+            docker stop yelp-app || true
+            docker rm yelp-app || true
+          else
+            echo "No existing container found."
+          fi
+
+      - name: Run the Docker Container with .env File
         run: |
           docker run -d -p 3000:3000 --name yelp-app \
             --env-file .env \
             $IMAGE_TAG_SHA
+
+      - name: Verify Application Logs
+        run: docker logs yelp-app
 
       - name: Test Application Health Check
         run: |
@@ -198,6 +210,7 @@ jobs:
             curl --fail http://localhost:3000 && break || sleep 5
           done
 
+  
   cleanup:
     name: 🧹 Cleanup
     runs-on: self-hosted
@@ -205,3 +218,4 @@ jobs:
     steps:
       - name: Remove Image Tag File
         run: rm -f image_tag.txt
+
