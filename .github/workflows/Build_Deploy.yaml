@@ -83,6 +83,13 @@ jobs:
     runs-on: self-hosted
     needs: docker_build
     steps:
+      - name: Verify Image Exists Before Scan
+        run: |
+          if [[ "$(docker images -q $IMAGE_TAG_SHA 2> /dev/null)" == "" ]]; then
+            echo "❌ Image Not Found! Skipping scan..."
+            exit 1
+          fi
+
       - name: Run Trivy Image Scan
         uses: aquasecurity/trivy-action@master
         with:
