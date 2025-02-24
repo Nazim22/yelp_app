@@ -13,9 +13,17 @@ permissions:
   contents: write
 
 jobs:
+  cleanup_before:
+    name: 🧹 Pre-Cleanup (Remove Old Artifacts)
+    runs-on: self-hosted
+    steps:
+      - name: Remove Old Image Tag File
+        run: rm -f image_tag.txt || true
+
   checkout:
     name: 📥 Checkout Repository
     runs-on: self-hosted
+    needs: cleanup_before
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -54,7 +62,7 @@ jobs:
     runs-on: self-hosted
     needs: code-scan
     steps:
-      - name: Define Image Tag
+      - name: Define Image Tag and Store Persistently
         run: |
           IMAGE_TAG_SHA=${{ secrets.DOCKERHUB_USERNAME }}/yelp-app:${{ github.sha }}
           echo "IMAGE_TAG_SHA=$IMAGE_TAG_SHA" >> $GITHUB_ENV
@@ -139,24 +147,17 @@ jobs:
         with:
           name: image-tag
 
-      - name: Verify Image Tag Exists
-        run: |
-          if [ ! -f image_tag.txt ]; then
-            echo "❌ Error: image_tag.txt not found!"
-            exit 1
-          fi
-          cat image_tag.txt
-
       - name: Load Image Tag
         run: |
           IMAGE_TAG_SHA=$(cat image_tag.txt)
           echo "Updating Kubernetes manifest with image: $IMAGE_TAG_SHA"
           echo "IMAGE_TAG_SHA=$IMAGE_TAG_SHA" >> $GITHUB_ENV
 
-      - name: Run Update Script
+      - name: Update Kubernetes Manifest (Directly in YAML)
         run: |
-          chmod +x ./update-k8s-manifest.sh
-          ./update-k8s-manifest.sh "$IMAGE_TAG_SHA"
+          sed -i "s|image: .*yelp-app:.*|image: $IMAGE_TAG_SHA|" K8s/yelp-app-deployment.yaml
+          echo "📄 Updated Deployment YAML:"
+          cat K8s/yelp-app-deployment.yaml
 
       - name: Commit and Push Updated Manifest
         run: |
@@ -181,14 +182,6 @@ jobs:
           IMAGE_TAG_SHA=$(cat image_tag.txt)
           echo "Running container with image: $IMAGE_TAG_SHA"
           echo "IMAGE_TAG_SHA=$IMAGE_TAG_SHA" >> $GITHUB_ENV
-
-      - name: Create .env File
-        run: |
-          echo "MAPBOX_TOKEN=${{ secrets.MAPBOX_TOKEN }}" >> .env
-          echo "DB_URL=${{ secrets.DB_URL }}" >> .env
-          echo "CLOUDINARY_CLOUD_NAME=${{ secrets.CLOUDINARY_CLOUD_NAME }}" >> .env
-          echo "CLOUDINARY_KEY=${{ secrets.CLOUDINARY_KEY }}" >> .env
-          echo "CLOUDINARY_SECRET=${{ secrets.CLOUDINARY_SECRET }}" >> .env
 
       - name: Remove Existing Container if Present
         run: |
@@ -216,10 +209,11 @@ jobs:
             curl --fail http://localhost:3000 && break || sleep 5
           done
 
-  cleanup:
-    name: 🧹 Cleanup
+  cleanup_after:
+    name: 🧹 Post-Cleanup
     runs-on: self-hosted
-    needs: test_run
+    needs: [update_k8s_manifest, test_run]
+    if: always()  # ✅ Ensures cleanup runs even if previous jobs fail
     steps:
       - name: Remove Image Tag File
         run: rm -f image_tag.txt || true
